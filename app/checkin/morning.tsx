@@ -1,0 +1,121 @@
+import React, { useState } from 'react'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
+import { useTheme } from '../../src/ThemeContext'
+import { supabase } from '../../src/lib/supabase'
+import { updateStreak } from '../../src/lib/utils/streak'
+import { BottomNav } from '../../src/components/BottomNav'
+import { Input } from '../../src/components/ui/Input'
+import { Btn } from '../../src/components/ui/Btn'
+import { Chip } from '../../src/components/ui/Chip'
+
+const CHIPS: Record<string, string[]> = {
+  q1: ['Patient and deliberate', 'Fully present', 'Decisive', 'Disciplined'],
+  q2: ['Finishing what I started', 'The conversation I\'ve been avoiding', 'Deep work, no distractions'],
+  q4: ['Avoidance', 'Overthinking', 'Reactivity', 'Control', 'People-pleasing', 'Distraction'],
+}
+
+interface Form { gratitude: string; q1: string; q2: string; q3: string; q4: string; q5: string; q6: string }
+
+export default function MorningScreen() {
+  const router  = useRouter()
+  const t       = useTheme()
+  const [form, setForm] = useState<Form>({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved]   = useState(false)
+
+  function set(k: keyof Form, v: string) { setForm(f => ({ ...f, [k]: v })) }
+
+  async function save() {
+    setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    const today = new Date().toISOString().split('T')[0]
+    if (user) {
+      await supabase.from('morning_checkins').upsert({
+        user_id: user.id, date: today, gratitude_entry: form.gratitude,
+        q1_intention: form.q1, q2_focus: form.q2, q3_energy: form.q3,
+        q4_pattern: form.q4, q5_standard: form.q5, q6_win: form.q6, is_abbreviated: false,
+      })
+      await updateStreak(user.id, supabase)
+    }
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  const Q = ({ label, sub, field, placeholder, chips }: { label: string; sub: string; field: keyof Form; placeholder: string; chips?: string[] }) => (
+    <View style={s.qBlock}>
+      <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>{label}</Text>
+      <Text style={[s.qSub, { color: t.textSecondary }]}>{sub}</Text>
+      <Input value={form[field]} onChangeText={v => set(field, v)} placeholder={placeholder} multiline numberOfLines={3} focusColor="blue" />
+      {chips && (
+        <View style={s.chips}>
+          {chips.map(c => <Chip key={c} label={c} onPress={() => set(field, c)} />)}
+        </View>
+      )}
+    </View>
+  )
+
+  return (
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
+      {/* Tab bar */}
+      <View style={[s.tabBar, { backgroundColor: t.bg2, borderBottomColor: t.border }]}>
+        {[
+          { label: 'Morning', active: true,  href: '/checkin/morning' },
+          { label: 'Evening', active: false, href: '/checkin/evening' },
+          { label: 'Scorecard', active: false, href: '/checkin/scorecard' },
+        ].map(tab => (
+          <TouchableOpacity key={tab.label} onPress={() => router.push(tab.href as any)} style={s.tab} activeOpacity={0.7}>
+            <Text style={[s.tabText, {
+              color: tab.active ? t.blue : t.textTertiary,
+              fontWeight: tab.active ? '500' : '400',
+            }]}>{tab.label}</Text>
+            {tab.active && <View style={[s.tabLine, { backgroundColor: t.blue }]} />}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+          {/* Gratitude primer */}
+          <View style={s.qBlock}>
+            <Text style={[s.sectionLabel, { color: t.textTertiary }]}>State primer</Text>
+            <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>
+              What's already working in your life that you're not giving enough credit to?
+            </Text>
+            <Text style={[s.qSub, { color: t.textSecondary }]}>This isn't positivity. It's pattern calibration. You can't see clearly from a deficit lens.</Text>
+            <Input value={form.gratitude} onChangeText={v => set('gratitude', v)} placeholder="What's already working is…" multiline numberOfLines={3} focusColor="blue" />
+          </View>
+
+          <Q label="Who do I need to be today?"              sub="Identity first. Actions follow."                          field="q1" placeholder="Today I need to be someone who…" chips={CHIPS.q1} />
+          <Q label="What's the one thing that matters most?" sub="One thing. Not a list."                                   field="q2" placeholder="The one thing is…"             chips={CHIPS.q2} />
+          <Q label="What's my energy level — and what's driving it?" sub="Name it accurately. You can only manage what you can see." field="q3" placeholder="My energy is… because…" />
+          <Q label="What pattern am I watching for today?"   sub="Name it before it shows up. That's the practice."        field="q4" placeholder="The pattern I'm watching for is…" chips={CHIPS.q4} />
+          <Q label="What standard am I holding myself to today?" sub="Not a goal. A non-negotiable."                        field="q5" placeholder="My standard today is…" />
+          <Q label="What would make today a win?"             sub="Be specific. Vague intentions produce vague outcomes."   field="q6" placeholder="Today is a win if…" />
+
+          <Btn label={saving ? 'Saving…' : 'Save morning check-in'} onPress={save} variant="blue" loading={saving} />
+          {saved && <Text style={[s.saved, { color: t.teal }]}>✓ Morning locked in.</Text>}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <BottomNav />
+    </SafeAreaView>
+  )
+}
+
+const s = StyleSheet.create({
+  safe:        { flex: 1 },
+  tabBar:      { flexDirection: 'row', borderBottomWidth: 1 },
+  tab:         { flex: 1, alignItems: 'center', paddingVertical: 14, position: 'relative' },
+  tabText:     { fontSize: 13 },
+  tabLine:     { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2 },
+  scroll:      { padding: 20, paddingTop: 28, paddingBottom: 40 },
+  sectionLabel:{ fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 12 },
+  question:    { fontSize: 20, lineHeight: 28, marginBottom: 8 },
+  qSub:        { fontSize: 13, lineHeight: 20, marginBottom: 14 },
+  qBlock:      { marginBottom: 32 },
+  chips:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  saved:       { textAlign: 'center', marginTop: 14, fontSize: 13, fontWeight: '500' },
+})
