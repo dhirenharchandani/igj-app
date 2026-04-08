@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
 import { supabase } from '../../src/lib/supabase'
+import { useStore } from '../../src/lib/store'
 import { DAILY_DIMENSIONS } from '../../src/lib/utils/pillars'
 import { BottomNav } from '../../src/components/BottomNav'
 import { DotRating } from '../../src/components/ui/DotRating'
@@ -20,6 +21,7 @@ const LABELS: Record<string, { low: string; mid: string; high: string }> = {
 export default function ScorecardScreen() {
   const router  = useRouter()
   const t       = useTheme()
+  const { markScorecardDone } = useStore()
   const [scores, setScores] = useState<Record<string, number>>({ awareness: 0, intention: 0, state: 0, presence: 0, ownership: 0 })
   const [loading, setLoading] = useState(false)
   const [insight, setInsight] = useState('')
@@ -45,6 +47,8 @@ export default function ScorecardScreen() {
         setLowestDim(data.lowestDimension ?? '')
       } catch {}
     }
+    // ── Mark done in store immediately — dashboard reads this, no async delay ──
+    markScorecardDone()
     setLoading(false)
   }
 
@@ -115,7 +119,7 @@ export default function ScorecardScreen() {
             ) : null}
 
             <Btn label={saved ? '✓ Insight saved' : 'Save this insight'} onPress={saveInsight} variant="ghost" disabled={saved} style={{ marginBottom: 12 }} />
-            <Btn label="Done for today →" onPress={() => router.replace('/dashboard')} variant="teal" />
+            <Btn label="Done for today →" onPress={() => router.back()} variant="teal" />
           </>
         )}
       </ScrollView>

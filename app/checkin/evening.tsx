@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
 import { supabase } from '../../src/lib/supabase'
+import { useStore } from '../../src/lib/store'
 import { BottomNav } from '../../src/components/BottomNav'
 import { Input } from '../../src/components/ui/Input'
 import { Btn } from '../../src/components/ui/Btn'
@@ -43,6 +44,7 @@ function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips, on
 export default function EveningScreen() {
   const router = useRouter()
   const t      = useTheme()
+  const { markEveningDone } = useStore()
   const [morningIntention, setMorningIntention] = useState('')
   const [morningDone, setMorningDone] = useState(false)
   const [form, setForm] = useState<Form>({ q1: '', q2: '', q3: '', q4: '', q5: '' })
@@ -73,6 +75,8 @@ export default function EveningScreen() {
         q1_delivered: form.q1, q2_pattern: form.q2, q3_gap: form.q3, q4_learning: form.q4, q5_tomorrow: form.q5,
       })
     }
+    // ── Mark done in store immediately — dashboard reads this, no async delay ──
+    markEveningDone()
     setSaving(false)
     router.push('/checkin/scorecard')
   }

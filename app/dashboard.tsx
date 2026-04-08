@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router'
 import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../src/ThemeContext'
 import { supabase } from '../src/lib/supabase'
+import { useStore } from '../src/lib/store'
 import { BottomNav } from '../src/components/BottomNav'
 import { Card } from '../src/components/ui/Card'
 import { Btn } from '../src/components/ui/Btn'
@@ -33,21 +34,32 @@ export default function DashboardScreen() {
   const router  = useRouter()
   const t       = useTheme()
   const sunday  = isSunday()
+  const { getTodayStatus } = useStore()
 
-  const [state, setState] = useState<DashState>({
-    streak: 0, longestStreak: 0, totalDays: 0, lowestDim: '', gapText: '',
-    todayScore: null, recentEntries: [], insightText: '',
-    milestoneShown: false, milestoneSummary: '', loadingMilestone: false,
-    morningDone: false, eveningDone: false, scorecardDone: false, weeklyResetDone: false,
-    eveningTime: '21:00',
-    loading: true,
+  const [state, setState] = useState<DashState>(() => {
+    // Seed from store immediately — no async delay, no flash of wrong state
+    const stored = getTodayStatus()
+    return {
+      streak: 0, longestStreak: 0, totalDays: 0, lowestDim: '', gapText: '',
+      todayScore: null, recentEntries: [], insightText: '',
+      milestoneShown: false, milestoneSummary: '', loadingMilestone: false,
+      morningDone: stored.morningDone,
+      eveningDone: stored.eveningDone,
+      scorecardDone: stored.scorecardDone,
+      weeklyResetDone: false,
+      eveningTime: '21:00',
+      loading: true,
+    }
   })
 
   useFocusEffect(useCallback(() => {
-    // Reset check-in flags immediately so stale state never shows
+    // Re-seed from store on every focus (handles case where user just completed a check-in)
+    const stored = getTodayStatus()
     setState(prev => ({
       ...prev,
-      morningDone: false, eveningDone: false, scorecardDone: false,
+      morningDone: stored.morningDone,
+      eveningDone: stored.eveningDone,
+      scorecardDone: stored.scorecardDone,
       weeklyResetDone: false, loading: true,
     }))
 
@@ -119,6 +131,8 @@ export default function DashboardScreen() {
       const currentStreak = streakRow?.current_streak ?? 0
       const showMilestone = [7, 30].includes(currentStreak) && !!morning
 
+      // Merge store + supabase: if either says done, it's done
+      const storeStatus = getTodayStatus()
       setState(prev => ({
         ...prev,
         streak: currentStreak,
@@ -129,8 +143,10 @@ export default function DashboardScreen() {
         todayScore: todayScoreVal, recentEntries,
         insightText: insight?.insight_text ?? '',
         milestoneShown: showMilestone,
-        morningDone: !!morning, eveningDone: !!evening,
-        scorecardDone: !!scorecard, weeklyResetDone: !!weeklyReset,
+        morningDone: !!morning || storeStatus.morningDone,
+        eveningDone: !!evening || storeStatus.eveningDone,
+        scorecardDone: !!scorecard || storeStatus.scorecardDone,
+        weeklyResetDone: !!weeklyReset,
         loading: false,
       }))
 
@@ -147,7 +163,7 @@ export default function DashboardScreen() {
       }
     }
     load()
-  }, []))  // useFocusEffect — re-runs every time this screen gains focus
+  }, [getTodayStatus]))  // useFocusEffect — re-runs every time this screen gains focus
 
   // ── Sequential hero: morning first, evening time-gated ──
   function getHero() {

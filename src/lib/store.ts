@@ -30,11 +30,24 @@ export interface OnboardingState {
   assessment_scores: AssessmentScores
 }
 
+interface TodayStatus {
+  date: string          // YYYY-MM-DD this status belongs to
+  morningDone: boolean
+  eveningDone: boolean
+  scorecardDone: boolean
+}
+
 interface Store {
   onboarding: OnboardingState
   profile: UserProfile
   setTheme: (theme: Theme) => void
   updateProfile: (data: Partial<UserProfile>) => void
+  // Today's check-in status — updated immediately on save, no async
+  todayStatus: TodayStatus
+  markMorningDone: () => void
+  markEveningDone: () => void
+  markScorecardDone: () => void
+  getTodayStatus: () => TodayStatus
 }
 
 export const useStore = create<Store>()(
@@ -59,11 +72,34 @@ export const useStore = create<Store>()(
         set((s) => ({ profile: { ...s.profile, theme } })),
       updateProfile: (data) =>
         set((s) => ({ profile: { ...s.profile, ...data } })),
+
+      todayStatus: { date: '', morningDone: false, eveningDone: false, scorecardDone: false },
+
+      getTodayStatus: () => {
+        const today = new Date().toISOString().split('T')[0]
+        const stored = (useStore.getState() as Store).todayStatus
+        // Reset if stored date is not today
+        if (stored.date !== today) return { date: today, morningDone: false, eveningDone: false, scorecardDone: false }
+        return stored
+      },
+
+      markMorningDone: () => {
+        const today = new Date().toISOString().split('T')[0]
+        set((s) => ({ todayStatus: { ...s.todayStatus, date: today, morningDone: true } }))
+      },
+      markEveningDone: () => {
+        const today = new Date().toISOString().split('T')[0]
+        set((s) => ({ todayStatus: { ...s.todayStatus, date: today, eveningDone: true } }))
+      },
+      markScorecardDone: () => {
+        const today = new Date().toISOString().split('T')[0]
+        set((s) => ({ todayStatus: { ...s.todayStatus, date: today, scorecardDone: true } }))
+      },
     }),
     {
       name: 'inner-game-journal',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ profile: s.profile, onboarding: s.onboarding }),
+      partialize: (s) => ({ profile: s.profile, onboarding: s.onboarding, todayStatus: s.todayStatus }),
     }
   )
 )
