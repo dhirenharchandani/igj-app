@@ -101,7 +101,7 @@ export default function MorningScreen() {
             </Text>
           </View>
 
-          <Btn label="Back to home" onPress={() => router.replace('/dashboard')} variant="teal" style={{ marginTop: 8 }} />
+          <Btn label="Back to home" onPress={() => router.back()} variant="teal" style={{ marginTop: 8 }} />
         </View>
       </SafeAreaView>
     )

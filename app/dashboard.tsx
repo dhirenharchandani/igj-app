@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter, useFocusEffect } from 'expo-router'
+import { useRouter } from 'expo-router'
+import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../src/ThemeContext'
 import { supabase } from '../src/lib/supabase'
 import { BottomNav } from '../src/components/BottomNav'
@@ -43,6 +44,13 @@ export default function DashboardScreen() {
   })
 
   useFocusEffect(useCallback(() => {
+    // Reset check-in flags immediately so stale state never shows
+    setState(prev => ({
+      ...prev,
+      morningDone: false, eveningDone: false, scorecardDone: false,
+      weeklyResetDone: false, loading: true,
+    }))
+
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setState(s => ({ ...s, loading: false })); return }
