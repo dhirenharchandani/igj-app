@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import { useTheme } from '../src/ThemeContext'
 import { supabase } from '../src/lib/supabase'
 import { BottomNav } from '../src/components/BottomNav'
@@ -18,6 +18,7 @@ interface DashState {
   recentEntries: RecentEntry[]; insightText: string
   milestoneShown: boolean; milestoneSummary: string; loadingMilestone: boolean
   morningDone: boolean; eveningDone: boolean; scorecardDone: boolean; weeklyResetDone: boolean
+  eveningTime: string
   loading: boolean
 }
 
@@ -37,10 +38,11 @@ export default function DashboardScreen() {
     todayScore: null, recentEntries: [], insightText: '',
     milestoneShown: false, milestoneSummary: '', loadingMilestone: false,
     morningDone: false, eveningDone: false, scorecardDone: false, weeklyResetDone: false,
+    eveningTime: '21:00',
     loading: true,
   })
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setState(s => ({ ...s, loading: false })); return }
@@ -62,7 +64,7 @@ export default function DashboardScreen() {
         { data: insight },
       ] = await Promise.all([
         supabase.from('user_streaks').select('current_streak,longest_streak,total_days').eq('user_id', user.id).single(),
-        supabase.from('user_profiles').select('identity_gap_text').eq('id', user.id).single(),
+        supabase.from('user_profiles').select('identity_gap_text,evening_time').eq('id', user.id).single(),
         supabase.from('morning_checkins').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('evening_checkins').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('daily_scorecards').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
@@ -115,6 +117,7 @@ export default function DashboardScreen() {
         longestStreak: streakRow?.longest_streak ?? 0,
         totalDays: streakRow?.total_days ?? 0,
         lowestDim, gapText: profile?.identity_gap_text ?? '',
+        eveningTime: (profile?.evening_time ?? '21:00:00').slice(0, 5),
         todayScore: todayScoreVal, recentEntries,
         insightText: insight?.insight_text ?? '',
         milestoneShown: showMilestone,
@@ -136,35 +139,56 @@ export default function DashboardScreen() {
       }
     }
     load()
-  }, [])
+  }, []))  // useFocusEffect — re-runs every time this screen gains focus
 
-  // ── Sequential hero: morning ALWAYS first, regardless of time ──
+  // ── Sequential hero: morning first, evening time-gated ──
   function getHero() {
     if (!state.morningDone) return {
       phase: 1,
       heading: 'Set the field for today.',
       sub: '5 minutes. Identity first — actions follow.',
-      btn: 'Start morning →', href: '/checkin/morning', color: t.blue,
+      btn: 'Start morning →', href: '/checkin/morning', color: t.blue, locked: false,
     }
-    if (!state.eveningDone) return {
-      phase: 2,
-      heading: 'Time to harvest your day.',
-      sub: 'What did today reveal about you?',
-      btn: 'Start evening →', href: '/checkin/evening', color: t.purple,
+
+    if (!state.eveningDone) {
+      const [evHr, evMin] = state.eveningTime.split(':').map(Number)
+      const now = new Date()
+      const eveningOpen = now.getHours() > evHr || (now.getHours() === evHr && now.getMinutes() >= evMin)
+
+      if (!eveningOpen) {
+        const fmt = new Date(); fmt.setHours(evHr, evMin, 0)
+        const label = fmt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        return {
+          phase: 2,
+          heading: 'Morning complete.',
+          sub: `Your evening check-in opens at ${label}. Come back then to reflect on how today went.`,
+          btn: undefined, href: '', color: t.teal, locked: true,
+        }
+      }
+
+      return {
+        phase: 2,
+        heading: 'Time to harvest your day.',
+        sub: 'What did today reveal about you?',
+        btn: 'Start evening →', href: '/checkin/evening', color: t.purple, locked: false,
+      }
     }
+
     if (!state.scorecardDone) return {
       phase: 3,
       heading: 'Score the day.',
       sub: 'Rate the 5 dimensions before you close it.',
-      btn: 'Daily scorecard →', href: '/checkin/scorecard', color: t.teal,
+      btn: 'Daily scorecard →', href: '/checkin/scorecard', color: t.teal, locked: false,
     }
+
     return {
       phase: 0,
       heading: 'Today is complete.',
       sub: state.todayScore
         ? `You scored ${state.todayScore}/5 today. ${state.streak} day streak.`
         : `${state.streak} day streak. Keep going.`,
-      btn: state.insightText ? "Read today's insight →" : undefined, href: '/patterns', color: t.teal,
+      btn: state.insightText ? "Read today's insight →" : undefined,
+      href: '/patterns', color: t.teal, locked: false,
     }
   }
 
