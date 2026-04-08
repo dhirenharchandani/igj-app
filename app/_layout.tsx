@@ -69,6 +69,7 @@ function RootNavigator() {
         <Stack.Screen name="assessment" />
         <Stack.Screen name="learn" />
         <Stack.Screen name="patterns" />
+        <Stack.Screen name="settings" />
       </Stack>
     </>
   )
