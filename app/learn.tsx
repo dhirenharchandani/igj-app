@@ -122,7 +122,7 @@ const s = StyleSheet.create({
   header:    { padding: 20, paddingBottom: 16, borderBottomWidth: 1 },
   eyebrow:   { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 4 },
   title:     { fontSize: 22, fontWeight: '600' },
-  scroll:    { padding: 20, paddingBottom: 40 },
+  scroll:    { padding: 20, paddingBottom: 100 },
   card:      { borderRadius: 16, padding: 20, borderWidth: 1, marginBottom: 12 },
   cardTop:   { flexDirection: 'row', alignItems: 'flex-start' },
   chMeta:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },

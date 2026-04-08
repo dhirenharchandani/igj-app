@@ -117,7 +117,7 @@ const s = StyleSheet.create({
   header:    { padding: 20, paddingBottom: 16, borderBottomWidth: 1 },
   eyebrow:   { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 6 },
   title:     { fontSize: 24, lineHeight: 30 },
-  scroll:    { padding: 20, paddingBottom: 40 },
+  scroll:    { padding: 20, paddingBottom: 100 },
   loading:   { textAlign: 'center', marginTop: 40 },
   sub:       { fontSize: 14, marginBottom: 24 },
   statRow:   { flexDirection: 'row', gap: 12, marginBottom: 24 },

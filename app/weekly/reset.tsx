@@ -150,7 +150,7 @@ const ss = StyleSheet.create({
   headerRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   eyebrow:     { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4 },
   counter:     { fontSize: 12 },
-  scroll:      { padding: 20, paddingBottom: 24 },
+  scroll:      { padding: 20, paddingBottom: 100 },
   sectionNum:  { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 6 },
   title:       { fontSize: 20, fontWeight: '600', marginBottom: 6 },
   sub:         { fontSize: 15, lineHeight: 24, marginBottom: 28 },

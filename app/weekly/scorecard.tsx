@@ -139,7 +139,7 @@ const s = StyleSheet.create({
   header:    { padding: 16, paddingHorizontal: 20, borderBottomWidth: 1 },
   eyebrow:   { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 4 },
   title:     { fontSize: 20, fontWeight: '600' },
-  scroll:    { padding: 20, paddingTop: 24, paddingBottom: 40 },
+  scroll:    { padding: 20, paddingTop: 24, paddingBottom: 100 },
   sub:       { fontSize: 13, marginBottom: 28 },
   dimBlock:  { marginBottom: 28 },
   dimHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },

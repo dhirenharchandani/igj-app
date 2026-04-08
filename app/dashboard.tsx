@@ -399,7 +399,7 @@ const s = StyleSheet.create({
   streakBadge:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
   fire:          { fontSize: 14 },
   streakText:    { fontSize: 13, fontWeight: '600' },
-  scroll:        { padding: 20, paddingBottom: 16 },
+  scroll:        { padding: 20, paddingBottom: 100 },
   phases:        { flexDirection: 'row', gap: 8, marginBottom: 20 },
   phaseBox:      { flex: 1, padding: 12, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
   phaseIcon:     { fontSize: 16, marginBottom: 4 },

@@ -167,7 +167,7 @@ const s = StyleSheet.create({
   tab:            { flex: 1, alignItems: 'center', paddingVertical: 14, position: 'relative' },
   tabText:        { fontSize: 13 },
   tabLine:        { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2 },
-  scroll:         { padding: 20, paddingTop: 28, paddingBottom: 40 },
+  scroll:         { padding: 20, paddingTop: 28, paddingBottom: 100 },
   sectionLabel:   { fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 12 },
   question:       { fontSize: 20, lineHeight: 28, marginBottom: 8 },
   qSub:           { fontSize: 13, lineHeight: 20, marginBottom: 14 },

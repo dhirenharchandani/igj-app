@@ -136,7 +136,7 @@ const s = StyleSheet.create({
   progressHeader:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   eyebrow:      { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4 },
   counter:      { fontSize: 12 },
-  scroll:       { padding: 20, paddingBottom: 24 },
+  scroll:       { padding: 20, paddingBottom: 100 },
   areaTitle:    { fontSize: 24, lineHeight: 32, marginBottom: 12 },
   areaDesc:     { fontSize: 15, lineHeight: 24, marginBottom: 36 },
   rateQ:        { fontSize: 17, lineHeight: 26, marginBottom: 8 },

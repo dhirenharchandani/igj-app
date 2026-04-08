@@ -186,7 +186,7 @@ const s = StyleSheet.create({
   backBtn:     { width: 40 },
   backText:    { fontSize: 22 },
   title:       { fontSize: 17, fontWeight: '600' },
-  scroll:      { padding: 24, paddingBottom: 32 },
+  scroll:      { padding: 24, paddingBottom: 100 },
   sectionTitle:{ fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 16 },
   timeRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, borderRadius: 16, borderWidth: 1, marginBottom: 12 },
   timeLabel:   { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },

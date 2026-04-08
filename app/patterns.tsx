@@ -183,7 +183,7 @@ const s = StyleSheet.create({
   header:       { padding: 20, paddingBottom: 16, borderBottomWidth: 1 },
   eyebrow:      { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 4 },
   title:        { fontSize: 20, lineHeight: 27 },
-  scroll:       { padding: 20, paddingBottom: 40 },
+  scroll:       { padding: 20, paddingBottom: 100 },
   chartTitle:   { fontSize: 13, fontWeight: '600', marginBottom: 16 },
   chips:        { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 },
   noData:       { fontSize: 13 },

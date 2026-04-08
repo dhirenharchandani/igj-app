@@ -163,7 +163,7 @@ const s = StyleSheet.create({
   tab:           { flex: 1, alignItems: 'center', paddingVertical: 14, position: 'relative' },
   tabText:       { fontSize: 13 },
   tabLine:       { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2 },
-  scroll:        { padding: 20, paddingTop: 28, paddingBottom: 40 },
+  scroll:        { padding: 20, paddingTop: 28, paddingBottom: 100 },
   mirror:        { borderRadius: 16, padding: 20, borderWidth: 1, marginBottom: 28 },
   mirrorText:    { fontSize: 15, lineHeight: 24 },
   noMorning:     { borderRadius: 12, padding: 12, borderWidth: 1, marginBottom: 28 },
