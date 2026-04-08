@@ -18,6 +18,33 @@ const CHIPS: Record<string, string[]> = {
 
 interface Form { gratitude: string; q1: string; q2: string; q3: string; q4: string; q5: string; q6: string }
 
+// ── Defined OUTSIDE the screen component to prevent remount on each keystroke ──
+type QProps = {
+  label: string
+  sub: string
+  value: string
+  onChangeText: (v: string) => void
+  placeholder: string
+  chips?: string[]
+  onChipPress?: (c: string) => void
+}
+
+function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips, onChipPress }: QProps) {
+  const t = useTheme()
+  return (
+    <View style={s.qBlock}>
+      <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>{label}</Text>
+      <Text style={[s.qSub, { color: t.textSecondary }]}>{sub}</Text>
+      <Input value={value} onChangeText={onChangeText} placeholder={placeholder} multiline numberOfLines={3} focusColor="blue" />
+      {chips && onChipPress && (
+        <View style={s.chips}>
+          {chips.map(c => <Chip key={c} label={c} onPress={() => onChipPress(c)} />)}
+        </View>
+      )}
+    </View>
+  )
+}
+
 export default function MorningScreen() {
   const router  = useRouter()
   const t       = useTheme()
@@ -25,7 +52,9 @@ export default function MorningScreen() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved]   = useState(false)
 
-  function set(k: keyof Form, v: string) { setForm(f => ({ ...f, [k]: v })) }
+  function set(k: keyof Form) {
+    return (v: string) => setForm(f => ({ ...f, [k]: v }))
+  }
 
   async function save() {
     setSaving(true)
@@ -44,33 +73,17 @@ export default function MorningScreen() {
     setTimeout(() => setSaved(false), 2500)
   }
 
-  const Q = ({ label, sub, field, placeholder, chips }: { label: string; sub: string; field: keyof Form; placeholder: string; chips?: string[] }) => (
-    <View style={s.qBlock}>
-      <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>{label}</Text>
-      <Text style={[s.qSub, { color: t.textSecondary }]}>{sub}</Text>
-      <Input value={form[field]} onChangeText={v => set(field, v)} placeholder={placeholder} multiline numberOfLines={3} focusColor="blue" />
-      {chips && (
-        <View style={s.chips}>
-          {chips.map(c => <Chip key={c} label={c} onPress={() => set(field, c)} />)}
-        </View>
-      )}
-    </View>
-  )
-
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       {/* Tab bar */}
       <View style={[s.tabBar, { backgroundColor: t.bg2, borderBottomColor: t.border }]}>
         {[
-          { label: 'Morning', active: true,  href: '/checkin/morning' },
-          { label: 'Evening', active: false, href: '/checkin/evening' },
+          { label: 'Morning',   active: true,  href: '/checkin/morning' },
+          { label: 'Evening',   active: false, href: '/checkin/evening' },
           { label: 'Scorecard', active: false, href: '/checkin/scorecard' },
         ].map(tab => (
           <TouchableOpacity key={tab.label} onPress={() => router.push(tab.href as any)} style={s.tab} activeOpacity={0.7}>
-            <Text style={[s.tabText, {
-              color: tab.active ? t.blue : t.textTertiary,
-              fontWeight: tab.active ? '500' : '400',
-            }]}>{tab.label}</Text>
+            <Text style={[s.tabText, { color: tab.active ? t.blue : t.textTertiary, fontWeight: tab.active ? '500' : '400' }]}>{tab.label}</Text>
             {tab.active && <View style={[s.tabLine, { backgroundColor: t.blue }]} />}
           </TouchableOpacity>
         ))}
@@ -78,6 +91,7 @@ export default function MorningScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+
           {/* Gratitude primer */}
           <View style={s.qBlock}>
             <Text style={[s.sectionLabel, { color: t.textTertiary }]}>State primer</Text>
@@ -85,15 +99,48 @@ export default function MorningScreen() {
               What's already working in your life that you're not giving enough credit to?
             </Text>
             <Text style={[s.qSub, { color: t.textSecondary }]}>This isn't positivity. It's pattern calibration. You can't see clearly from a deficit lens.</Text>
-            <Input value={form.gratitude} onChangeText={v => set('gratitude', v)} placeholder="What's already working is…" multiline numberOfLines={3} focusColor="blue" />
+            <Input value={form.gratitude} onChangeText={set('gratitude')} placeholder="What's already working is…" multiline numberOfLines={3} focusColor="blue" />
           </View>
 
-          <Q label="Who do I need to be today?"              sub="Identity first. Actions follow."                          field="q1" placeholder="Today I need to be someone who…" chips={CHIPS.q1} />
-          <Q label="What's the one thing that matters most?" sub="One thing. Not a list."                                   field="q2" placeholder="The one thing is…"             chips={CHIPS.q2} />
-          <Q label="What's my energy level — and what's driving it?" sub="Name it accurately. You can only manage what you can see." field="q3" placeholder="My energy is… because…" />
-          <Q label="What pattern am I watching for today?"   sub="Name it before it shows up. That's the practice."        field="q4" placeholder="The pattern I'm watching for is…" chips={CHIPS.q4} />
-          <Q label="What standard am I holding myself to today?" sub="Not a goal. A non-negotiable."                        field="q5" placeholder="My standard today is…" />
-          <Q label="What would make today a win?"             sub="Be specific. Vague intentions produce vague outcomes."   field="q6" placeholder="Today is a win if…" />
+          <QuestionBlock
+            label="Who do I need to be today?"
+            sub="Identity first. Actions follow."
+            value={form.q1} onChangeText={set('q1')}
+            placeholder="Today I need to be someone who…"
+            chips={CHIPS.q1} onChipPress={set('q1')}
+          />
+          <QuestionBlock
+            label="What's the one thing that matters most?"
+            sub="One thing. Not a list."
+            value={form.q2} onChangeText={set('q2')}
+            placeholder="The one thing is…"
+            chips={CHIPS.q2} onChipPress={set('q2')}
+          />
+          <QuestionBlock
+            label="What's my energy level — and what's driving it?"
+            sub="Name it accurately. You can only manage what you can see."
+            value={form.q3} onChangeText={set('q3')}
+            placeholder="My energy is… because…"
+          />
+          <QuestionBlock
+            label="What pattern am I watching for today?"
+            sub="Name it before it shows up. That's the practice."
+            value={form.q4} onChangeText={set('q4')}
+            placeholder="The pattern I'm watching for is…"
+            chips={CHIPS.q4} onChipPress={set('q4')}
+          />
+          <QuestionBlock
+            label="What standard am I holding myself to today?"
+            sub="Not a goal. A non-negotiable."
+            value={form.q5} onChangeText={set('q5')}
+            placeholder="My standard today is…"
+          />
+          <QuestionBlock
+            label="What would make today a win?"
+            sub="Be specific. Vague intentions produce vague outcomes."
+            value={form.q6} onChangeText={set('q6')}
+            placeholder="Today is a win if…"
+          />
 
           <Btn label={saving ? 'Saving…' : 'Save morning check-in'} onPress={save} variant="blue" loading={saving} />
           {saved && <Text style={[s.saved, { color: t.teal }]}>✓ Morning locked in.</Text>}
@@ -106,16 +153,16 @@ export default function MorningScreen() {
 }
 
 const s = StyleSheet.create({
-  safe:        { flex: 1 },
-  tabBar:      { flexDirection: 'row', borderBottomWidth: 1 },
-  tab:         { flex: 1, alignItems: 'center', paddingVertical: 14, position: 'relative' },
-  tabText:     { fontSize: 13 },
-  tabLine:     { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2 },
-  scroll:      { padding: 20, paddingTop: 28, paddingBottom: 40 },
-  sectionLabel:{ fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 12 },
-  question:    { fontSize: 20, lineHeight: 28, marginBottom: 8 },
-  qSub:        { fontSize: 13, lineHeight: 20, marginBottom: 14 },
-  qBlock:      { marginBottom: 32 },
-  chips:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  saved:       { textAlign: 'center', marginTop: 14, fontSize: 13, fontWeight: '500' },
+  safe:         { flex: 1 },
+  tabBar:       { flexDirection: 'row', borderBottomWidth: 1 },
+  tab:          { flex: 1, alignItems: 'center', paddingVertical: 14, position: 'relative' },
+  tabText:      { fontSize: 13 },
+  tabLine:      { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2 },
+  scroll:       { padding: 20, paddingTop: 28, paddingBottom: 40 },
+  sectionLabel: { fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 12 },
+  question:     { fontSize: 20, lineHeight: 28, marginBottom: 8 },
+  qSub:         { fontSize: 13, lineHeight: 20, marginBottom: 14 },
+  qBlock:       { marginBottom: 32 },
+  chips:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  saved:        { textAlign: 'center', marginTop: 14, fontSize: 13, fontWeight: '500' },
 })

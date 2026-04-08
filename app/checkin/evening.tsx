@@ -10,7 +10,35 @@ import { Btn } from '../../src/components/ui/Btn'
 import { Chip } from '../../src/components/ui/Chip'
 
 const PATTERN_CHIPS = ['Avoidance', 'Overthinking', 'Reactivity', 'People-pleasing', 'Distraction', 'Seeking validation']
+
 interface Form { q1: string; q2: string; q3: string; q4: string; q5: string }
+
+// ── Defined OUTSIDE the screen component to prevent remount on each keystroke ──
+type QProps = {
+  label: string
+  sub: string
+  value: string
+  onChangeText: (v: string) => void
+  placeholder: string
+  chips?: string[]
+  onChipPress?: (c: string) => void
+}
+
+function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips, onChipPress }: QProps) {
+  const t = useTheme()
+  return (
+    <View style={s.qBlock}>
+      <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>{label}</Text>
+      <Text style={[s.qSub, { color: t.textSecondary }]}>{sub}</Text>
+      <Input value={value} onChangeText={onChangeText} placeholder={placeholder} multiline numberOfLines={3} focusColor="blue" />
+      {chips && onChipPress && (
+        <View style={s.chips}>
+          {chips.map(c => <Chip key={c} label={c} onPress={() => onChipPress(c)} />)}
+        </View>
+      )}
+    </View>
+  )
+}
 
 export default function EveningScreen() {
   const router = useRouter()
@@ -31,7 +59,9 @@ export default function EveningScreen() {
     load()
   }, [])
 
-  function set(k: keyof Form, v: string) { setForm(f => ({ ...f, [k]: v })) }
+  function set(k: keyof Form) {
+    return (v: string) => setForm(f => ({ ...f, [k]: v }))
+  }
 
   async function save() {
     setSaving(true)
@@ -46,19 +76,6 @@ export default function EveningScreen() {
     setSaving(false)
     router.push('/checkin/scorecard')
   }
-
-  const Q = ({ label, sub, field, placeholder, chips }: { label: string; sub: string; field: keyof Form; placeholder: string; chips?: string[] }) => (
-    <View style={s.qBlock}>
-      <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>{label}</Text>
-      <Text style={[s.qSub, { color: t.textSecondary }]}>{sub}</Text>
-      <Input value={form[field]} onChangeText={v => set(field, v)} placeholder={placeholder} multiline numberOfLines={3} focusColor="blue" />
-      {chips && (
-        <View style={s.chips}>
-          {chips.map(c => <Chip key={c} label={c} onPress={() => set(field, form[field] ? form[field] + ', ' + c : c)} />)}
-        </View>
-      )}
-    </View>
-  )
 
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
@@ -77,6 +94,7 @@ export default function EveningScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+
           {morningDone ? (
             <View style={[s.mirror, { backgroundColor: t.bg3, borderColor: t.border }]}>
               <Text style={[s.mirrorText, { color: t.textSecondary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>
@@ -89,20 +107,42 @@ export default function EveningScreen() {
             </View>
           )}
 
-          <Q label="Did I show up as the person I said I'd be this morning?" sub="Not pass or fail. Just honest." field="q1" placeholder="I showed up as… / I didn't show up as…" />
+          <QuestionBlock
+            label="Did I show up as the person I said I'd be this morning?"
+            sub="Not pass or fail. Just honest."
+            value={form.q1} onChangeText={set('q1')}
+            placeholder="I showed up as… / I didn't show up as…"
+          />
 
           <View style={s.qBlock}>
-            <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>What pattern showed up today that I didn't want?</Text>
+            <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>
+              What pattern showed up today that I didn't want?
+            </Text>
             <Text style={[s.qSub, { color: t.textSecondary }]}>Name the pattern, not just the event.</Text>
-            <Input value={form.q2} onChangeText={v => set('q2', v)} placeholder="The pattern that showed up was…" multiline numberOfLines={3} focusColor="blue" />
+            <Input value={form.q2} onChangeText={set('q2')} placeholder="The pattern that showed up was…" multiline numberOfLines={3} focusColor="blue" />
             <View style={s.chips}>
-              {PATTERN_CHIPS.map(c => <Chip key={c} label={c} onPress={() => set('q2', c)} />)}
+              {PATTERN_CHIPS.map(c => <Chip key={c} label={c} onPress={() => setForm(f => ({ ...f, q2: c }))} />)}
             </View>
           </View>
 
-          <Q label="Where was the gap between my intention and my execution?" sub="Be specific. 'Everywhere' isn't an answer." field="q3" placeholder="The gap lived in…" />
-          <Q label="What's the one thing I'm taking from today?" sub="One thing. Distill it." field="q4" placeholder="Today taught me…" />
-          <Q label="What needs to shift tomorrow?" sub="Not a to-do list. What actually needs to change." field="q5" placeholder="Tomorrow I need to shift…" />
+          <QuestionBlock
+            label="Where was the gap between my intention and my execution?"
+            sub="Be specific. 'Everywhere' isn't an answer."
+            value={form.q3} onChangeText={set('q3')}
+            placeholder="The gap lived in…"
+          />
+          <QuestionBlock
+            label="What's the one thing I'm taking from today?"
+            sub="One thing. Distill it."
+            value={form.q4} onChangeText={set('q4')}
+            placeholder="Today taught me…"
+          />
+          <QuestionBlock
+            label="What needs to shift tomorrow?"
+            sub="Not a to-do list. What actually needs to change."
+            value={form.q5} onChangeText={set('q5')}
+            placeholder="Tomorrow I need to shift…"
+          />
 
           <Btn label={saving ? 'Saving…' : 'Complete evening →'} onPress={save} variant="blue" loading={saving} />
         </ScrollView>
@@ -114,18 +154,18 @@ export default function EveningScreen() {
 }
 
 const s = StyleSheet.create({
-  safe:       { flex: 1 },
-  tabBar:     { flexDirection: 'row', borderBottomWidth: 1 },
-  tab:        { flex: 1, alignItems: 'center', paddingVertical: 14, position: 'relative' },
-  tabText:    { fontSize: 13 },
-  tabLine:    { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2 },
-  scroll:     { padding: 20, paddingTop: 28, paddingBottom: 40 },
-  mirror:     { borderRadius: 16, padding: 20, borderWidth: 1, marginBottom: 28 },
-  mirrorText: { fontSize: 15, lineHeight: 24 },
-  noMorning:  { borderRadius: 12, padding: 12, borderWidth: 1, marginBottom: 28 },
+  safe:          { flex: 1 },
+  tabBar:        { flexDirection: 'row', borderBottomWidth: 1 },
+  tab:           { flex: 1, alignItems: 'center', paddingVertical: 14, position: 'relative' },
+  tabText:       { fontSize: 13 },
+  tabLine:       { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2 },
+  scroll:        { padding: 20, paddingTop: 28, paddingBottom: 40 },
+  mirror:        { borderRadius: 16, padding: 20, borderWidth: 1, marginBottom: 28 },
+  mirrorText:    { fontSize: 15, lineHeight: 24 },
+  noMorning:     { borderRadius: 12, padding: 12, borderWidth: 1, marginBottom: 28 },
   noMorningText: { fontSize: 13 },
-  qBlock:     { marginBottom: 32 },
-  question:   { fontSize: 20, lineHeight: 28, marginBottom: 8 },
-  qSub:       { fontSize: 13, lineHeight: 20, marginBottom: 14 },
-  chips:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  qBlock:        { marginBottom: 32 },
+  question:      { fontSize: 20, lineHeight: 28, marginBottom: 8 },
+  qSub:          { fontSize: 13, lineHeight: 20, marginBottom: 14 },
+  chips:         { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
 })
