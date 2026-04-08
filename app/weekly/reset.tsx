@@ -81,6 +81,9 @@ export default function WeeklyResetScreen() {
         <View style={ss.headerRow}>
           <Text style={[ss.eyebrow, { color: t.amber }]}>Weekly Reset</Text>
           <Text style={[ss.counter, { color: t.textTertiary }]}>{section + 1}/{SECTIONS.length}</Text>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
+            <Text style={[ss.closeBtn, { color: t.textTertiary }]}>✕</Text>
+          </TouchableOpacity>
         </View>
         <ProgressBar value={((section + 1) / SECTIONS.length) * 100} color={t.amber} />
       </View>
@@ -150,7 +153,7 @@ const ss = StyleSheet.create({
   headerRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   eyebrow:     { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4 },
   counter:     { fontSize: 12 },
-  scroll:      { padding: 20, paddingBottom: 100 },
+  scroll:      { padding: 20, paddingBottom: 32 },
   sectionNum:  { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 6 },
   title:       { fontSize: 20, fontWeight: '600', marginBottom: 6 },
   sub:         { fontSize: 15, lineHeight: 24, marginBottom: 28 },
@@ -164,4 +167,5 @@ const ss = StyleSheet.create({
   bottom:      { flexDirection: 'row', gap: 10, padding: 12, paddingHorizontal: 20, borderTopWidth: 1 },
   backBtn:     { padding: 14, borderRadius: 14, borderWidth: 1, paddingHorizontal: 20 },
   backBtnText: { fontSize: 16 },
+  closeBtn:    { fontSize: 18, paddingLeft: 8 },
 })
