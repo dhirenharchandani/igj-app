@@ -70,7 +70,41 @@ export default function MorningScreen() {
     }
     setSaving(false)
     setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+  }
+
+  if (saved) {
+    return (
+      <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
+        <View style={s.doneWrap}>
+          <View style={[s.doneIcon, { backgroundColor: t.tealDim, borderColor: t.tealBorder }]}>
+            <Text style={s.doneIconText}>✓</Text>
+          </View>
+          <Text style={[s.doneTitle, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular' }]}>
+            Morning locked in.
+          </Text>
+          <Text style={[s.doneSub, { color: t.textSecondary }]}>
+            You've set the field for today. Come back this evening to reflect on how it actually went.
+          </Text>
+
+          {form.q1 ? (
+            <View style={[s.intentionCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.blue }]}>
+              <Text style={[s.intentionLabel, { color: t.blue }]}>Your intention today</Text>
+              <Text style={[s.intentionText, { color: t.textSecondary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>
+                "{form.q1}"
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={[s.reminderBox, { backgroundColor: t.bg3, borderColor: t.border }]}>
+            <Text style={[s.reminderText, { color: t.textTertiary }]}>
+              🌙  Evening check-in available after 5 PM
+            </Text>
+          </View>
+
+          <Btn label="Back to home" onPress={() => router.replace('/dashboard')} variant="teal" style={{ marginTop: 8 }} />
+        </View>
+      </SafeAreaView>
+    )
   }
 
   return (
@@ -143,7 +177,6 @@ export default function MorningScreen() {
           />
 
           <Btn label={saving ? 'Saving…' : 'Save morning check-in'} onPress={save} variant="blue" loading={saving} />
-          {saved && <Text style={[s.saved, { color: t.teal }]}>✓ Morning locked in.</Text>}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -164,5 +197,14 @@ const s = StyleSheet.create({
   qSub:         { fontSize: 13, lineHeight: 20, marginBottom: 14 },
   qBlock:       { marginBottom: 32 },
   chips:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  saved:        { textAlign: 'center', marginTop: 14, fontSize: 13, fontWeight: '500' },
+  doneWrap:       { flex: 1, padding: 28, paddingTop: 60, alignItems: 'center' },
+  doneIcon:       { width: 72, height: 72, borderRadius: 36, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
+  doneIconText:   { fontSize: 28, color: '#4ecdc4' },
+  doneTitle:      { fontSize: 28, textAlign: 'center', marginBottom: 14 },
+  doneSub:        { fontSize: 15, lineHeight: 24, textAlign: 'center', marginBottom: 28 },
+  intentionCard:  { width: '100%', borderRadius: 16, padding: 20, borderWidth: 1, borderLeftWidth: 3, marginBottom: 20 },
+  intentionLabel: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 10 },
+  intentionText:  { fontSize: 16, lineHeight: 25 },
+  reminderBox:    { width: '100%', borderRadius: 12, padding: 14, borderWidth: 1, marginBottom: 28, alignItems: 'center' },
+  reminderText:   { fontSize: 13 },
 })
