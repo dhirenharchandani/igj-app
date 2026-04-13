@@ -257,11 +257,11 @@ export default function DashboardScreen() {
           {PHASES.map((p, i) => (
             <View key={p.label} style={[s.phaseBox, {
               backgroundColor: phaseStatus[i] ? t.tealDim : hero.phase === i + 1 ? t.bg2 : t.bg3,
-              borderColor: phaseStatus[i] ? t.tealBorder : hero.phase === i + 1 ? t.border : 'transparent',
-              opacity: !phaseStatus[i] && hero.phase !== i + 1 && hero.phase !== 0 ? 0.4 : 1,
+              borderColor: phaseStatus[i] ? t.tealBorder : hero.phase === i + 1 ? t.border : t.border,
+              opacity: !phaseStatus[i] && hero.phase !== i + 1 && hero.phase !== 0 ? 0.65 : 1,
             }]}>
-              <Text style={s.phaseIcon}>{phaseStatus[i] ? '✓' : p.icon}</Text>
-              <Text style={[s.phaseLabel, { color: phaseStatus[i] ? t.teal : t.textTertiary }]}>{p.label}</Text>
+              <Text style={[s.phaseIcon, { color: phaseStatus[i] ? t.teal : undefined }]}>{phaseStatus[i] ? '✓' : p.icon}</Text>
+              <Text style={[s.phaseLabel, { color: phaseStatus[i] ? t.teal : hero.phase === i + 1 ? t.textPrimary : t.textSecondary }]}>{p.label}</Text>
             </View>
           ))}
         </View>

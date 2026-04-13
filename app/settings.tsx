@@ -99,10 +99,10 @@ export default function SettingsScreen() {
               style={[s.timeRow, { backgroundColor: t.bg2, borderColor: showMorningPicker ? t.blue : t.border }]}
             >
               <View>
-                <Text style={[s.timeLabel, { color: t.textTertiary }]}>☀️  Morning check-in</Text>
+                <Text style={[s.timeLabel, { color: t.textSecondary }]}>☀️  Morning check-in</Text>
                 <Text style={[s.timeValue, { color: t.textPrimary }]}>{fmtTime(morningDate)}</Text>
               </View>
-              <Text style={[s.chevron, { color: t.textTertiary }]}>›</Text>
+              <Text style={[s.chevron, { color: t.textSecondary }]}>›</Text>
             </TouchableOpacity>
 
             {showMorningPicker && (
@@ -122,10 +122,10 @@ export default function SettingsScreen() {
               style={[s.timeRow, { backgroundColor: t.bg2, borderColor: showEveningPicker ? t.purple : t.border }]}
             >
               <View>
-                <Text style={[s.timeLabel, { color: t.textTertiary }]}>🌙  Evening check-in</Text>
+                <Text style={[s.timeLabel, { color: t.textSecondary }]}>🌙  Evening check-in</Text>
                 <Text style={[s.timeValue, { color: t.textPrimary }]}>{fmtTime(eveningDate)}</Text>
               </View>
-              <Text style={[s.chevron, { color: t.textTertiary }]}>›</Text>
+              <Text style={[s.chevron, { color: t.textSecondary }]}>›</Text>
             </TouchableOpacity>
 
             {showEveningPicker && (
