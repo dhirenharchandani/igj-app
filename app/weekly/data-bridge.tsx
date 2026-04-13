@@ -14,13 +14,30 @@ interface BridgeData { daysCompleted: number; avgScore: number; lowestDim: strin
 export default function DataBridgeScreen() {
   const router  = useRouter()
   const t       = useTheme()
-  const [data, setData]     = useState<BridgeData>({ daysCompleted: 0, avgScore: 0, lowestDim: '', topPattern: '' })
+  const [data, setData]       = useState<BridgeData>({ daysCompleted: 0, avgScore: 0, lowestDim: '', topPattern: '' })
   const [loading, setLoading] = useState(true)
+  const [totalDays, setTotalDays]             = useState(0)
+  const [daysSinceFirst, setDaysSinceFirst]   = useState(0)
+  const weeklyUnlocked = totalDays >= 7 || daysSinceFirst >= 7
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+
+      // Check unlock status — fetch all morning check-in dates
+      const { data: allMornings } = await supabase
+        .from('morning_checkins').select('date').eq('user_id', user.id).order('date', { ascending: true })
+      const morningDates = (allMornings ?? []).map((r: { date: string }) => r.date)
+      const total = morningDates.length
+      const first = morningDates[0]
+      const sinceFirst = first
+        ? Math.floor((Date.now() - new Date(first + 'T12:00:00').getTime()) / 86400000)
+        : 0
+      setTotalDays(total)
+      setDaysSinceFirst(sinceFirst)
+      if (total < 7 && sinceFirst < 7) { setLoading(false); return }
+
       const weekStart = getWeekStart()
       const weekEnd   = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6)
       const weekEndStr = weekEnd.toISOString().split('T')[0]
@@ -68,6 +85,19 @@ export default function DataBridgeScreen() {
       <ScrollView contentContainerStyle={s.scroll}>
         {loading ? (
           <Text style={[s.loading, { color: t.textSecondary }]}>Loading your week…</Text>
+        ) : !weeklyUnlocked ? (
+          <View style={s.lockedWrap}>
+            <Text style={s.lockIcon}>🔒</Text>
+            <Text style={[s.lockedTitle, { color: t.textPrimary }]}>Not unlocked yet</Text>
+            <Text style={[s.lockedSub, { color: t.textSecondary }]}>
+              The Weekly Reset unlocks after 7 days of check-ins. You have{' '}
+              <Text style={{ color: t.teal, fontWeight: '600' }}>{totalDays}</Text> so far.
+            </Text>
+            <View style={[s.progressTrack, { backgroundColor: t.bg3, borderColor: t.border }]}>
+              <View style={[s.progressFill, { backgroundColor: t.teal, width: `${Math.min(100, (totalDays / 7) * 100)}%` as any }]} />
+            </View>
+            <Text style={[s.progressLabel, { color: t.textTertiary }]}>{totalDays}/7 days</Text>
+          </View>
         ) : (
           <>
             <Text style={[s.sub, { color: t.textSecondary }]}>Before the reset — see what the data shows.</Text>
@@ -124,7 +154,14 @@ const s = StyleSheet.create({
   statLabel: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
   statVal:   { fontSize: 32, fontWeight: '700' },
   statMax:   { fontSize: 16 },
-  cardLabel: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
-  cardVal:   { fontSize: 16, fontWeight: '600', textTransform: 'capitalize', marginBottom: 4 },
-  cardSub:   { fontSize: 13 },
+  cardLabel:     { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
+  cardVal:       { fontSize: 16, fontWeight: '600', textTransform: 'capitalize', marginBottom: 4 },
+  cardSub:       { fontSize: 13 },
+  lockedWrap:    { flex: 1, alignItems: 'center', paddingTop: 60, paddingHorizontal: 20 },
+  lockIcon:      { fontSize: 48, marginBottom: 20 },
+  lockedTitle:   { fontSize: 22, fontWeight: '600', marginBottom: 12, textAlign: 'center' },
+  lockedSub:     { fontSize: 15, lineHeight: 24, textAlign: 'center', marginBottom: 28 },
+  progressTrack: { width: '100%', height: 8, borderRadius: 4, borderWidth: 1, overflow: 'hidden', marginBottom: 8 },
+  progressFill:  { height: '100%', borderRadius: 4 },
+  progressLabel: { fontSize: 12 },
 })

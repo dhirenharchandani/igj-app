@@ -20,8 +20,41 @@ interface DashState {
   recentEntries: RecentEntry[]; insightText: string
   milestoneShown: boolean; milestoneSummary: string; loadingMilestone: boolean
   morningDone: boolean; eveningDone: boolean; scorecardDone: boolean; weeklyResetDone: boolean
+  weeklyUnlocked: boolean
   eveningTime: string
   loading: boolean
+}
+
+// Compute streak entirely client-side from an array of date strings (no view dependency)
+function computeStreak(dates: string[]): { current: number; longest: number; total: number } {
+  if (!dates.length) return { current: 0, longest: 0, total: 0 }
+  const dateSet = new Set(dates)
+  const sorted  = [...dates].sort().reverse()            // newest first
+  const today   = new Date().toISOString().split('T')[0]
+  const yest    = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+
+  // Current streak — only active if done today or yesterday
+  let current = 0
+  if (dateSet.has(today) || dateSet.has(yest)) {
+    const d = new Date((dateSet.has(today) ? today : yest) + 'T12:00:00')
+    while (dateSet.has(d.toISOString().split('T')[0])) {
+      current++
+      d.setDate(d.getDate() - 1)
+    }
+  }
+
+  // Longest streak across all history
+  let longest = current
+  let run = 1
+  for (let i = 1; i < sorted.length; i++) {
+    const diff = Math.round(
+      (new Date(sorted[i-1] + 'T12:00:00').getTime() - new Date(sorted[i] + 'T12:00:00').getTime()) / 86400000
+    )
+    run = diff === 1 ? run + 1 : 1
+    if (run > longest) longest = run
+  }
+
+  return { current, longest, total: dates.length }
 }
 
 const PHASES = [
@@ -47,6 +80,7 @@ export default function DashboardScreen() {
       eveningDone: stored.eveningDone,
       scorecardDone: stored.scorecardDone,
       weeklyResetDone: false,
+      weeklyUnlocked: false,
       eveningTime: '21:00',
       loading: true,
     }
@@ -71,7 +105,6 @@ export default function DashboardScreen() {
       const weekStart = getWeekStart()
 
       const [
-        { data: streakRow },
         { data: profile },
         { data: morning },
         { data: evening },
@@ -79,11 +112,10 @@ export default function DashboardScreen() {
         { data: weeklyReset },
         { data: todayScore },
         { data: recentScorecards },
-        { data: recentMornings },
+        { data: allMornings },   // all dates for streak + weekly unlock
         { data: recentEvenings },
         { data: insight },
       ] = await Promise.all([
-        supabase.from('user_streaks').select('current_streak,longest_streak,total_days').eq('user_id', user.id).single(),
         supabase.from('user_profiles').select('identity_gap_text,evening_time').eq('id', user.id).single(),
         supabase.from('morning_checkins').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('evening_checkins').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
@@ -91,7 +123,7 @@ export default function DashboardScreen() {
         supabase.from('weekly_resets').select('id').eq('user_id', user.id).eq('week_start', weekStart).maybeSingle(),
         supabase.from('daily_scorecards').select('awareness,intention,state,presence,ownership').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('daily_scorecards').select('date,awareness,intention,state,presence,ownership').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
-        supabase.from('morning_checkins').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
+        supabase.from('morning_checkins').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(100),
         supabase.from('evening_checkins').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
         supabase.from('daily_insights').select('insight_text').eq('user_id', user.id).eq('date', today).maybeSingle(),
       ])
@@ -104,8 +136,19 @@ export default function DashboardScreen() {
         todayScoreVal = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10 : null
       }
 
+      // Streak — computed client-side, no view dependency
+      const allMorningDates = (allMornings ?? []).map((r: { date: string }) => r.date)
+      const streakData = computeStreak(allMorningDates)
+
+      // Weekly reset unlock: 7+ entries OR 7+ days since first check-in
+      const firstDate = allMorningDates.length ? [...allMorningDates].sort()[0] : null
+      const daysSinceFirst = firstDate
+        ? Math.floor((Date.now() - new Date(firstDate + 'T12:00:00').getTime()) / 86400000)
+        : 0
+      const weeklyUnlocked = allMorningDates.length >= 7 || daysSinceFirst >= 7
+
       // Recent entries
-      const morningDates = new Set((recentMornings ?? []).map((r: { date: string }) => r.date))
+      const morningDates = new Set(allMorningDates.slice(0, 7))
       const eveningDates = new Set((recentEvenings ?? []).map((r: { date: string }) => r.date))
       const scoreMap = new Map<string, number>()
       ;(recentScorecards ?? []).forEach((sc: Record<string, number | string>) => {
@@ -128,16 +171,16 @@ export default function DashboardScreen() {
         lowestDim = avgs.filter(([, v]) => v > 0).sort(([, a], [, b]) => a - b)[0]?.[0] ?? ''
       }
 
-      const currentStreak = streakRow?.current_streak ?? 0
-      const showMilestone = [7, 30].includes(currentStreak) && !!morning
+      const showMilestone = [7, 30].includes(streakData.current) && !!morning
 
       // Merge store + supabase: if either says done, it's done
       const storeStatus = getTodayStatus()
       setState(prev => ({
         ...prev,
-        streak: currentStreak,
-        longestStreak: streakRow?.longest_streak ?? 0,
-        totalDays: streakRow?.total_days ?? 0,
+        streak: streakData.current,
+        longestStreak: streakData.longest,
+        totalDays: streakData.total,
+        weeklyUnlocked,
         lowestDim, gapText: profile?.identity_gap_text ?? '',
         eveningTime: (profile?.evening_time ?? '21:00:00').slice(0, 5),
         todayScore: todayScoreVal, recentEntries,
@@ -281,8 +324,8 @@ export default function DashboardScreen() {
           )}
         </View>
 
-        {/* Sunday weekly reset banner */}
-        {sunday && !state.weeklyResetDone && (
+        {/* Sunday weekly reset banner — only after 7 days */}
+        {sunday && !state.weeklyResetDone && state.weeklyUnlocked && (
           <View style={[s.sundayBanner, { backgroundColor: t.amberDim, borderColor: t.amberBorder }]}>
             <Text style={[s.sundayTitle, { color: t.textPrimary }]}>📅 Sunday — Weekly Reset</Text>
             <Text style={[s.sundaySub, { color: t.textSecondary }]}>Review the week. Find the pattern. Set the standard.</Text>
@@ -354,16 +397,29 @@ export default function DashboardScreen() {
         {/* Quick nav */}
         <View style={s.tiles}>
           {[
-            { label: '📖 Learn',         href: '/learn' },
-            { label: '🔁 Weekly Reset',  href: '/weekly/data-bridge' },
-            ...(state.totalDays >= 3 ? [{ label: '🧠 Assessment', href: '/assessment' }] : []),
-            ...(state.totalDays >= 7 ? [{ label: '📊 Patterns',   href: '/patterns' }] : []),
-          ].map(tile => (
+            { label: '📖 Learn',        href: '/learn',               show: true,                    locked: false },
+            { label: '🧠 Assessment',   href: '/assessment',          show: state.totalDays >= 3,    locked: false },
+            { label: '📊 Patterns',     href: '/patterns',            show: state.totalDays >= 7,    locked: false },
+          ].filter(t => t.show).map(tile => (
             <TouchableOpacity key={tile.href} onPress={() => router.push(tile.href as any)} activeOpacity={0.8}
               style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
               <Text style={[s.tileText, { color: t.textSecondary }]}>{tile.label}</Text>
             </TouchableOpacity>
           ))}
+          {/* Weekly Reset — locked until 7 days in */}
+          <TouchableOpacity
+            onPress={() => state.weeklyUnlocked ? router.push('/weekly/data-bridge') : null}
+            activeOpacity={state.weeklyUnlocked ? 0.8 : 1}
+            style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border, opacity: state.weeklyUnlocked ? 1 : 0.5 }]}>
+            <Text style={[s.tileText, { color: t.textSecondary }]}>
+              {state.weeklyUnlocked ? '🔁 Weekly Reset' : `🔒 Weekly Reset`}
+            </Text>
+            {!state.weeklyUnlocked && (
+              <Text style={[s.tileSub, { color: t.textTertiary }]}>
+                {Math.max(0, 7 - state.totalDays)} day{Math.max(0, 7 - state.totalDays) !== 1 ? 's' : ''} to unlock
+              </Text>
+            )}
+          </TouchableOpacity>
         </View>
 
       </ScrollView>
@@ -435,6 +491,7 @@ const s = StyleSheet.create({
   tiles:         { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
   tile:          { borderRadius: 14, padding: 14, paddingHorizontal: 16, borderWidth: 1 },
   tileText:      { fontSize: 13, fontWeight: '500' },
+  tileSub:       { fontSize: 10, marginTop: 3 },
   modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalSheet:    { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 28, paddingBottom: 40 },
   milestoneLabel:{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 12 },
