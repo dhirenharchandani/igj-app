@@ -227,8 +227,8 @@ export default function DashboardScreen() {
         const label = fmt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
         return {
           phase: 2,
-          heading: 'Morning complete.',
-          sub: `Your evening check-in opens at ${label}. Come back then to reflect on how today went.`,
+          heading: `Evening check-in opens at ${label}.`,
+          sub: `Come back then to close out your day and reflect on what actually happened.`,
           btn: undefined, href: '', color: t.teal, locked: true,
         }
       }
@@ -315,7 +315,7 @@ export default function DashboardScreen() {
             <Text style={[s.phaseNum, { color: t.textTertiary }]}>Phase {hero.phase} of 3</Text>
           )}
           <Text style={[s.heroTitle, { color: t.textPrimary }]}>{hero.heading}</Text>
-          <Text style={[s.heroSub, { color: t.textSecondary, marginBottom: hero.btn ? 18 : 0 }]}>{hero.sub}</Text>
+          <Text style={[s.heroSub, { color: hero.btn ? t.textSecondary : t.textPrimary, marginBottom: hero.btn ? 18 : 0 }]}>{hero.sub}</Text>
           {hero.btn && (
             <TouchableOpacity onPress={() => router.push(hero.href as any)} activeOpacity={0.8}
               style={[s.heroBtn, { backgroundColor: hero.color }]}>
