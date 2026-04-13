@@ -70,7 +70,7 @@ export default function ScorecardScreen() {
           { label: 'Scorecard', active: true,  href: '/checkin/scorecard' },
         ].map(tab => (
           <TouchableOpacity key={tab.label} onPress={() => router.push(tab.href as any)} style={s.tab} activeOpacity={0.7}>
-            <Text style={[s.tabText, { color: tab.active ? t.blue : t.textTertiary, fontWeight: tab.active ? '500' : '400' }]}>{tab.label}</Text>
+            <Text style={[s.tabText, { color: tab.active ? t.blue : t.textSecondary, fontWeight: tab.active ? '500' : '400' }]}>{tab.label}</Text>
             {tab.active && <View style={[s.tabLine, { backgroundColor: t.blue }]} />}
           </TouchableOpacity>
         ))}

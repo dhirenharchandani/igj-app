@@ -44,22 +44,43 @@ function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips, on
 export default function EveningScreen() {
   const router = useRouter()
   const t      = useTheme()
-  const { markEveningDone } = useStore()
+  const { markEveningDone, getTodayStatus } = useStore()
   const [morningIntention, setMorningIntention] = useState('')
   const [morningDone, setMorningDone] = useState(false)
   const [form, setForm] = useState<Form>({ q1: '', q2: '', q3: '', q4: '', q5: '' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    // Seed from store immediately — avoids false "morning not done" flash
+    const storeStatus = getTodayStatus()
+    if (storeStatus.morningDone) setMorningDone(true)
+
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const today = new Date().toISOString().split('T')[0]
-      const { data } = await supabase.from('morning_checkins').select('q1_intention').eq('user_id', user.id).eq('date', today).single()
-      if (data?.q1_intention) { setMorningIntention(data.q1_intention); setMorningDone(true) }
+
+      // Load morning intention (use maybeSingle to avoid error when no row)
+      const { data: morning } = await supabase.from('morning_checkins')
+        .select('q1_intention').eq('user_id', user.id).eq('date', today).maybeSingle()
+      if (morning?.q1_intention) { setMorningIntention(morning.q1_intention); setMorningDone(true) }
+
+      // Pre-load existing evening responses
+      const { data: evening } = await supabase.from('evening_checkins')
+        .select('q1_delivered,q2_pattern,q3_gap,q4_learning,q5_tomorrow')
+        .eq('user_id', user.id).eq('date', today).maybeSingle()
+      if (evening) {
+        setForm({
+          q1: evening.q1_delivered ?? '',
+          q2: evening.q2_pattern ?? '',
+          q3: evening.q3_gap ?? '',
+          q4: evening.q4_learning ?? '',
+          q5: evening.q5_tomorrow ?? '',
+        })
+      }
     }
     load()
-  }, [])
+  }, [getTodayStatus])
 
   function set(k: keyof Form) {
     return (v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -90,7 +111,7 @@ export default function EveningScreen() {
           { label: 'Scorecard', active: false, href: '/checkin/scorecard' },
         ].map(tab => (
           <TouchableOpacity key={tab.label} onPress={() => router.push(tab.href as any)} style={s.tab} activeOpacity={0.7}>
-            <Text style={[s.tabText, { color: tab.active ? t.blue : t.textTertiary, fontWeight: tab.active ? '500' : '400' }]}>{tab.label}</Text>
+            <Text style={[s.tabText, { color: tab.active ? t.blue : t.textSecondary, fontWeight: tab.active ? '500' : '400' }]}>{tab.label}</Text>
             {tab.active && <View style={[s.tabLine, { backgroundColor: t.blue }]} />}
           </TouchableOpacity>
         ))}

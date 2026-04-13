@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -57,6 +57,31 @@ export default function MorningScreen() {
   const [form, setForm] = useState<Form>({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // Pre-load today's existing responses (so they show when navigating back)
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const today = new Date().toISOString().split('T')[0]
+      const { data } = await supabase.from('morning_checkins')
+        .select('gratitude_entry,q1_intention,q2_focus,q3_energy,q4_pattern,q5_standard,q6_win')
+        .eq('user_id', user.id).eq('date', today).maybeSingle()
+      if (data) {
+        setForm({
+          gratitude: data.gratitude_entry ?? '',
+          q1: data.q1_intention ?? '',
+          q2: data.q2_focus ?? '',
+          q3: data.q3_energy ?? '',
+          q4: data.q4_pattern ?? '',
+          q5: data.q5_standard ?? '',
+          q6: data.q6_win ?? '',
+        })
+        setSaved(true)  // Show the "morning locked in" completion screen
+      }
+    }
+    load()
+  }, [])
 
   function set(k: keyof Form) {
     return (v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -124,7 +149,7 @@ export default function MorningScreen() {
           { label: 'Scorecard', active: false, href: '/checkin/scorecard' },
         ].map(tab => (
           <TouchableOpacity key={tab.label} onPress={() => router.push(tab.href as any)} style={s.tab} activeOpacity={0.7}>
-            <Text style={[s.tabText, { color: tab.active ? t.blue : t.textTertiary, fontWeight: tab.active ? '500' : '400' }]}>{tab.label}</Text>
+            <Text style={[s.tabText, { color: tab.active ? t.blue : t.textSecondary, fontWeight: tab.active ? '500' : '400' }]}>{tab.label}</Text>
             {tab.active && <View style={[s.tabLine, { backgroundColor: t.blue }]} />}
           </TouchableOpacity>
         ))}

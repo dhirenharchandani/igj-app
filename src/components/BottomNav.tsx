@@ -33,7 +33,7 @@ export function BottomNav() {
             style={styles.tab}
             activeOpacity={0.65}
           >
-            <Text style={[styles.label, { color: active ? t.textPrimary : t.textTertiary, fontWeight: active ? '600' : '400' }]}>
+            <Text style={[styles.label, { color: active ? t.textPrimary : t.textSecondary, fontWeight: active ? '600' : '400' }]}>
               {link.label}
             </Text>
             {active && <View style={[styles.dot, { backgroundColor: t.teal }]} />}
