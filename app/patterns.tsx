@@ -69,9 +69,9 @@ export default function PatternsScreen() {
       </View>
       <View style={{ flex: 1, padding: 24, paddingTop: 48, alignItems: 'center' }}>
         <Text style={{ fontSize: 40, marginBottom: 24 }}>≋</Text>
-        <Text style={{ fontSize: 22, fontWeight: '600', textAlign: 'center', marginBottom: 12, color: t.textPrimary }}>Patterns unlock at 7 days</Text>
+        <Text style={{ fontSize: 22, fontWeight: '600', textAlign: 'center', marginBottom: 12, color: t.textPrimary }}>Patterns unlock after 7 days</Text>
         <Text style={{ fontSize: 15, lineHeight: 24, textAlign: 'center', color: t.textSecondary, marginBottom: 40 }}>
-          Patterns need time to form. Keep going — the data gets meaningful after a week.
+          Patterns need time to form. Keep going — meaningful data starts appearing after your first week.
         </Text>
         <View style={{ width: '100%', backgroundColor: t.bg3, borderRadius: 8, height: 8, overflow: 'hidden', marginBottom: 12, borderWidth: 1, borderColor: t.border }}>
           <View style={{ height: '100%', borderRadius: 8, backgroundColor: t.teal, width: `${Math.min(100, (dayCount / 7) * 100)}%` as any }} />
@@ -102,7 +102,7 @@ export default function PatternsScreen() {
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       <View style={[s.header, { borderBottomColor: t.border }]}>
         <Text style={[s.eyebrow, { color: t.teal }]}>Your patterns</Text>
-        <Text style={[s.title, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>30 days of data. What it's actually showing you.</Text>
+        <Text style={[s.title, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>Your data. What it's actually showing you.</Text>
       </View>
 
       <ScrollView contentContainerStyle={s.scroll}>

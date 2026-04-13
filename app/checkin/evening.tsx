@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native'
+import React, { useState, useCallback } from 'react'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../../src/ThemeContext'
 import { supabase } from '../../src/lib/supabase'
 import { useStore } from '../../src/lib/store'
@@ -82,23 +83,28 @@ export default function EveningScreen() {
   const [morningDone, setMorningDone] = useState(false)
   const [form, setForm] = useState<Form>({ q1: '', q2: '', q3: '', q4: '', q5: '' })
   const [saving, setSaving] = useState(false)
+  // null = checking, true = done today, false = not done
+  const [saved, setSaved] = useState<boolean | null>(null)
 
-  useEffect(() => {
+  // useFocusEffect: re-runs every time screen gains focus.
+  // Midnight reset is automatic — next day's date finds no data → fresh form.
+  useFocusEffect(useCallback(() => {
+    setSaved(null) // Reset to "checking" on every focus
     // Seed from store immediately — avoids false "morning not done" flash
     const storeStatus = getTodayStatus()
     if (storeStatus.morningDone) setMorningDone(true)
 
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) { setSaved(false); return }
       const today = new Date().toISOString().split('T')[0]
 
-      // Load morning intention (use maybeSingle to avoid error when no row)
+      // Load morning intention (maybeSingle avoids error when no row)
       const { data: morning } = await supabase.from('morning_checkins')
         .select('q1_intention').eq('user_id', user.id).eq('date', today).maybeSingle()
       if (morning?.q1_intention) { setMorningIntention(morning.q1_intention); setMorningDone(true) }
 
-      // Pre-load existing evening responses
+      // Check if evening is already done today
       const { data: evening } = await supabase.from('evening_checkins')
         .select('q1_delivered,q2_pattern,q3_gap,q4_learning,q5_tomorrow')
         .eq('user_id', user.id).eq('date', today).maybeSingle()
@@ -110,10 +116,13 @@ export default function EveningScreen() {
           q4: evening.q4_learning ?? '',
           q5: evening.q5_tomorrow ?? '',
         })
+        setSaved(true)
+      } else {
+        setSaved(false)
       }
     }
     load()
-  }, [getTodayStatus])
+  }, [getTodayStatus]))
 
   function set(k: keyof Form) {
     return (v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -129,12 +138,67 @@ export default function EveningScreen() {
         q1_delivered: form.q1, q2_pattern: form.q2, q3_gap: form.q3, q4_learning: form.q4, q5_tomorrow: form.q5,
       })
     }
-    // ── Mark done in store immediately — dashboard reads this, no async delay ──
     markEveningDone()
     setSaving(false)
-    router.push('/checkin/scorecard')
+    setSaved(true)  // Show completion screen — user taps "Score the day" to continue
   }
 
+  // ── Checking Supabase ──
+  if (saved === null) {
+    return (
+      <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={t.blue} />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // ── Already done today — show recap ──
+  if (saved) {
+    return (
+      <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={s.doneScroll}>
+          <View style={s.doneWrap}>
+            <View style={[s.doneIcon, { backgroundColor: t.bg3, borderColor: t.border }]}>
+              <Text style={[s.doneIconText, { color: t.purple }]}>✓</Text>
+            </View>
+            <Text style={[s.doneTitle, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular' }]}>
+              Evening locked in.
+            </Text>
+            <Text style={[s.doneSub, { color: t.textSecondary }]}>
+              You've closed the loop on today. Come back tomorrow morning to start fresh.
+            </Text>
+          </View>
+
+          {/* Recap of key answers */}
+          {form.q1 ? (
+            <View style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.purple }]}>
+              <Text style={[s.recapLabel, { color: t.purple }]}>How you showed up</Text>
+              <Text style={[s.recapText, { color: t.textSecondary }]}>{form.q1}</Text>
+            </View>
+          ) : null}
+          {form.q2 ? (
+            <View style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.amber }]}>
+              <Text style={[s.recapLabel, { color: t.amber }]}>Pattern that showed up</Text>
+              <Text style={[s.recapText, { color: t.textSecondary }]}>{form.q2}</Text>
+            </View>
+          ) : null}
+          {form.q5 ? (
+            <View style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.teal }]}>
+              <Text style={[s.recapLabel, { color: t.teal }]}>What shifts tomorrow</Text>
+              <Text style={[s.recapText, { color: t.textSecondary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>"{form.q5}"</Text>
+            </View>
+          ) : null}
+
+          <Btn label="Score the day →" onPress={() => router.push('/checkin/scorecard')} variant="blue" style={{ marginBottom: 12 }} />
+          <Btn label="Back to home" onPress={() => router.back()} variant="ghost" />
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
+
+  // ── Not done yet — show the form ──
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       <View style={[s.tabBar, { backgroundColor: t.bg2, borderBottomColor: t.border }]}>
@@ -172,7 +236,6 @@ export default function EveningScreen() {
             placeholder="I showed up as… / I didn't show up as…"
             chips={CHIPS.q1} onChipPress={set('q1')}
           />
-
           <QuestionBlock
             label="What pattern showed up today that I didn't want?"
             sub="Name the pattern, not just the event."
@@ -180,7 +243,6 @@ export default function EveningScreen() {
             placeholder="The pattern that showed up was…"
             chips={CHIPS.q2} onChipPress={set('q2')}
           />
-
           <QuestionBlock
             label="Where was the gap between my intention and my execution?"
             sub="Be specific. 'Everywhere' isn't an answer."
@@ -227,4 +289,14 @@ const s = StyleSheet.create({
   question:      { fontSize: 20, lineHeight: 28, marginBottom: 8 },
   qSub:          { fontSize: 13, lineHeight: 20, marginBottom: 14 },
   chips:         { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  // Done / recap screen
+  doneScroll:    { padding: 28, paddingTop: 60, paddingBottom: 60 },
+  doneWrap:      { alignItems: 'center', marginBottom: 32 },
+  doneIcon:      { width: 72, height: 72, borderRadius: 36, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
+  doneIconText:  { fontSize: 28 },
+  doneTitle:     { fontSize: 28, textAlign: 'center', marginBottom: 14 },
+  doneSub:       { fontSize: 15, lineHeight: 24, textAlign: 'center' },
+  recapCard:     { borderRadius: 16, padding: 18, borderWidth: 1, borderLeftWidth: 3, marginBottom: 12 },
+  recapLabel:    { fontSize: 10, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
+  recapText:     { fontSize: 15, lineHeight: 24 },
 })

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native'
+import React, { useState, useCallback } from 'react'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../../src/ThemeContext'
 import { useStore } from '../../src/lib/store'
 import { supabase } from '../../src/lib/supabase'
@@ -56,17 +57,30 @@ export default function MorningScreen() {
   const { markMorningDone } = useStore()
   const [form, setForm] = useState<Form>({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  // null = checking, true = done today, false = not done
+  const [saved, setSaved] = useState<boolean | null>(null)
+  const [eveningTime, setEveningTime] = useState('')
 
-  // Pre-load today's existing responses (so they show when navigating back)
-  useEffect(() => {
+  // useFocusEffect: re-runs every time the screen gains focus.
+  // This means: coming back from another tab, AND the next morning (new date → no data found → fresh form).
+  useFocusEffect(useCallback(() => {
+    setSaved(null) // Reset to "checking" state on every focus
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) { setSaved(false); return }
       const today = new Date().toISOString().split('T')[0]
-      const { data } = await supabase.from('morning_checkins')
-        .select('gratitude_entry,q1_intention,q2_focus,q3_energy,q4_pattern,q5_standard,q6_win')
-        .eq('user_id', user.id).eq('date', today).maybeSingle()
+      const [{ data }, { data: profile }] = await Promise.all([
+        supabase.from('morning_checkins')
+          .select('gratitude_entry,q1_intention,q2_focus,q3_energy,q4_pattern,q5_standard,q6_win')
+          .eq('user_id', user.id).eq('date', today).maybeSingle(),
+        supabase.from('user_profiles').select('evening_time').eq('id', user.id).maybeSingle(),
+      ])
+      // Format the evening scheduled time for the reminder
+      if (profile?.evening_time) {
+        const [h, m] = (profile.evening_time as string).split(':').map(Number)
+        const fmt = new Date(); fmt.setHours(h, m, 0)
+        setEveningTime(fmt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))
+      }
       if (data) {
         setForm({
           gratitude: data.gratitude_entry ?? '',
@@ -77,11 +91,13 @@ export default function MorningScreen() {
           q5: data.q5_standard ?? '',
           q6: data.q6_win ?? '',
         })
-        setSaved(true)  // Show the "morning locked in" completion screen
+        setSaved(true)
+      } else {
+        setSaved(false)
       }
     }
     load()
-  }, [])
+  }, []))
 
   function set(k: keyof Form) {
     return (v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -99,47 +115,72 @@ export default function MorningScreen() {
       })
       await updateStreak(user.id, supabase)
     }
-    // ── Mark done in store immediately — dashboard reads this, no async delay ──
     markMorningDone()
     setSaving(false)
     setSaved(true)
   }
 
-  if (saved) {
+  // ── Checking Supabase — show brief spinner, not a blank form ──
+  if (saved === null) {
     return (
       <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
-        <View style={s.doneWrap}>
-          <View style={[s.doneIcon, { backgroundColor: t.tealDim, borderColor: t.tealBorder }]}>
-            <Text style={s.doneIconText}>✓</Text>
-          </View>
-          <Text style={[s.doneTitle, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular' }]}>
-            Morning locked in.
-          </Text>
-          <Text style={[s.doneSub, { color: t.textSecondary }]}>
-            You've set the field for today. Come back this evening to reflect on how it actually went.
-          </Text>
-
-          {form.q1 ? (
-            <View style={[s.intentionCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.blue }]}>
-              <Text style={[s.intentionLabel, { color: t.blue }]}>Your intention today</Text>
-              <Text style={[s.intentionText, { color: t.textSecondary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>
-                "{form.q1}"
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={[s.reminderBox, { backgroundColor: t.bg3, borderColor: t.border }]}>
-            <Text style={[s.reminderText, { color: t.textTertiary }]}>
-              🌙  Evening check-in available at your scheduled time
-            </Text>
-          </View>
-
-          <Btn label="Back to home" onPress={() => router.back()} variant="teal" style={{ marginTop: 8 }} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={t.blue} />
         </View>
       </SafeAreaView>
     )
   }
 
+  // ── Already done today ──
+  if (saved) {
+    return (
+      <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={s.doneScroll}>
+          <View style={s.doneWrap}>
+            <View style={[s.doneIcon, { backgroundColor: t.tealDim, borderColor: t.tealBorder }]}>
+              <Text style={s.doneIconText}>✓</Text>
+            </View>
+            <Text style={[s.doneTitle, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular' }]}>
+              Morning locked in.
+            </Text>
+            <Text style={[s.doneSub, { color: t.textSecondary }]}>
+              You've set the field for today. Come back this evening to reflect on how it actually went.
+            </Text>
+          </View>
+
+          {/* Recap of their answers */}
+          {form.q1 ? (
+            <View style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.blue }]}>
+              <Text style={[s.recapLabel, { color: t.blue }]}>Who you said you'd be today</Text>
+              <Text style={[s.recapText, { color: t.textSecondary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>"{form.q1}"</Text>
+            </View>
+          ) : null}
+          {form.q2 ? (
+            <View style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.teal }]}>
+              <Text style={[s.recapLabel, { color: t.teal }]}>The one thing that matters most</Text>
+              <Text style={[s.recapText, { color: t.textSecondary }]}>{form.q2}</Text>
+            </View>
+          ) : null}
+          {form.q6 ? (
+            <View style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.amber }]}>
+              <Text style={[s.recapLabel, { color: t.amber }]}>What would make today a win</Text>
+              <Text style={[s.recapText, { color: t.textSecondary }]}>{form.q6}</Text>
+            </View>
+          ) : null}
+
+          <View style={[s.reminderBox, { backgroundColor: t.bg3, borderColor: t.border }]}>
+            <Text style={[s.reminderText, { color: t.textSecondary }]}>
+              🌙  Evening check-in opens{eveningTime ? ` at ${eveningTime}` : ' this evening'}
+            </Text>
+          </View>
+
+          <Btn label="Back to home" onPress={() => router.back()} variant="teal" style={{ marginTop: 8 }} />
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
+
+  // ── Not done yet — show the form ──
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       <View style={[s.tabBar, { backgroundColor: t.bg2, borderBottomColor: t.border }]}>
@@ -198,14 +239,16 @@ const s = StyleSheet.create({
   qSub:           { fontSize: 13, lineHeight: 20, marginBottom: 14 },
   qBlock:         { marginBottom: 32 },
   chips:          { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  doneWrap:       { flex: 1, padding: 28, paddingTop: 60, alignItems: 'center' },
+  // Done / recap screen
+  doneScroll:     { padding: 28, paddingTop: 60, paddingBottom: 60 },
+  doneWrap:       { alignItems: 'center', marginBottom: 32 },
   doneIcon:       { width: 72, height: 72, borderRadius: 36, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
   doneIconText:   { fontSize: 28, color: '#4ecdc4' },
   doneTitle:      { fontSize: 28, textAlign: 'center', marginBottom: 14 },
-  doneSub:        { fontSize: 15, lineHeight: 24, textAlign: 'center', marginBottom: 28 },
-  intentionCard:  { width: '100%', borderRadius: 16, padding: 20, borderWidth: 1, borderLeftWidth: 3, marginBottom: 20 },
-  intentionLabel: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 10 },
-  intentionText:  { fontSize: 16, lineHeight: 25 },
-  reminderBox:    { width: '100%', borderRadius: 12, padding: 14, borderWidth: 1, marginBottom: 28, alignItems: 'center' },
+  doneSub:        { fontSize: 15, lineHeight: 24, textAlign: 'center' },
+  recapCard:      { borderRadius: 16, padding: 18, borderWidth: 1, borderLeftWidth: 3, marginBottom: 12 },
+  recapLabel:     { fontSize: 10, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
+  recapText:      { fontSize: 15, lineHeight: 24 },
+  reminderBox:    { borderRadius: 12, padding: 14, borderWidth: 1, marginTop: 8, marginBottom: 28, alignItems: 'center' },
   reminderText:   { fontSize: 13 },
 })
