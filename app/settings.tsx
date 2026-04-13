@@ -106,13 +106,16 @@ export default function SettingsScreen() {
             </TouchableOpacity>
 
             {showMorningPicker && (
-              <DateTimePicker
-                value={morningDate}
-                mode="time"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(_, d) => { if (d) setMorningDate(d); if (Platform.OS !== 'ios') setShowMorningPicker(false) }}
-                style={{ marginBottom: 8 }}
-              />
+              <View style={[s.pickerWrap, { backgroundColor: t.bg2, borderColor: t.border }]}>
+                <DateTimePicker
+                  value={morningDate}
+                  mode="time"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  themeVariant={isDark ? 'dark' : 'light'}
+                  onChange={(_, d) => { if (d) setMorningDate(d); if (Platform.OS !== 'ios') setShowMorningPicker(false) }}
+                  style={{ width: '100%' }}
+                />
+              </View>
             )}
 
             {/* Evening */}
@@ -129,13 +132,16 @@ export default function SettingsScreen() {
             </TouchableOpacity>
 
             {showEveningPicker && (
-              <DateTimePicker
-                value={eveningDate}
-                mode="time"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(_, d) => { if (d) setEveningDate(d); if (Platform.OS !== 'ios') setShowEveningPicker(false) }}
-                style={{ marginBottom: 8 }}
-              />
+              <View style={[s.pickerWrap, { backgroundColor: t.bg2, borderColor: t.border }]}>
+                <DateTimePicker
+                  value={eveningDate}
+                  mode="time"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  themeVariant={isDark ? 'dark' : 'light'}
+                  onChange={(_, d) => { if (d) setEveningDate(d); if (Platform.OS !== 'ios') setShowEveningPicker(false) }}
+                  style={{ width: '100%' }}
+                />
+              </View>
             )}
 
             <Text style={[s.hint, { color: t.textTertiary }]}>
@@ -202,4 +208,5 @@ const s = StyleSheet.create({
   toggleBtn:   { padding: 10, borderRadius: 20, borderWidth: 1 },
   signOutBtn:  { padding: 16, borderRadius: 14, borderWidth: 1, alignItems: 'center' },
   signOutText: { fontSize: 15, fontWeight: '500' },
+  pickerWrap:  { borderRadius: 16, borderWidth: 1, overflow: 'hidden', marginBottom: 12, alignItems: 'center' },
 })

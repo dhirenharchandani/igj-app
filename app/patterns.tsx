@@ -34,14 +34,19 @@ export default function PatternsScreen() {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
       const eightWeeksAgo = new Date(Date.now() - 56 * 86400000).toISOString().split('T')[0]
 
-      const [{ count }, { data: daily }, { data: weekly }, { data: insightRows }] = await Promise.all([
-        supabase.from('morning_checkins').select('id', { count: 'exact' }).eq('user_id', user.id),
+      const [{ data: allMornings }, { data: allEvenings }, { data: daily }, { data: weekly }, { data: insightRows }] = await Promise.all([
+        supabase.from('morning_checkins').select('date').eq('user_id', user.id),
+        supabase.from('evening_checkins').select('date').eq('user_id', user.id),
         supabase.from('daily_scorecards').select('*').eq('user_id', user.id).gte('date', thirtyDaysAgo).order('date'),
         supabase.from('weekly_scorecards').select('*').eq('user_id', user.id).gte('week_start', eightWeeksAgo).order('week_start'),
         supabase.from('daily_insights').select('id,date,insight_text').eq('user_id', user.id).eq('is_saved', true).order('date', { ascending: false }),
       ])
 
-      setDayCount(count ?? 0)
+      const uniqueDays = new Set([
+        ...(allMornings ?? []).map((r: { date: string }) => r.date),
+        ...(allEvenings ?? []).map((r: { date: string }) => r.date),
+      ])
+      setDayCount(uniqueDays.size)
       setDailyScores(daily ?? [])
       setWeeklyScores(weekly ?? [])
       setInsights(insightRows ?? [])
@@ -58,10 +63,22 @@ export default function PatternsScreen() {
 
   if (dayCount < 7) return (
     <SafeAreaView style={[{ flex: 1, backgroundColor: t.bg }]} edges={['top', 'bottom']}>
-      <View style={{ flex: 1, padding: 24, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ fontSize: 40, marginBottom: 20 }}>≋</Text>
-        <Text style={[{ fontSize: 22, fontWeight: '600', textAlign: 'center', marginBottom: 12, color: t.textPrimary }]}>Come back after 7 days</Text>
-        <Text style={[{ fontSize: 15, lineHeight: 24, textAlign: 'center', color: t.textSecondary }]}>You're on day {dayCount}. Patterns need time to form. Keep going — the data gets meaningful after a week.</Text>
+      <View style={[{ borderBottomWidth: 1, padding: 20, paddingBottom: 16, borderBottomColor: t.border }]}>
+        <Text style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 4, color: t.teal }}>Your patterns</Text>
+        <Text style={{ fontSize: 20, color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic', lineHeight: 27 }}>30 days of data. What it's actually showing you.</Text>
+      </View>
+      <View style={{ flex: 1, padding: 24, paddingTop: 48, alignItems: 'center' }}>
+        <Text style={{ fontSize: 40, marginBottom: 24 }}>≋</Text>
+        <Text style={{ fontSize: 22, fontWeight: '600', textAlign: 'center', marginBottom: 12, color: t.textPrimary }}>Patterns unlock at 7 days</Text>
+        <Text style={{ fontSize: 15, lineHeight: 24, textAlign: 'center', color: t.textSecondary, marginBottom: 40 }}>
+          Patterns need time to form. Keep going — the data gets meaningful after a week.
+        </Text>
+        <View style={{ width: '100%', backgroundColor: t.bg3, borderRadius: 8, height: 8, overflow: 'hidden', marginBottom: 12, borderWidth: 1, borderColor: t.border }}>
+          <View style={{ height: '100%', borderRadius: 8, backgroundColor: t.teal, width: `${Math.min(100, (dayCount / 7) * 100)}%` as any }} />
+        </View>
+        <Text style={{ fontSize: 13, color: t.textSecondary, fontWeight: '600' }}>
+          {dayCount} <Text style={{ color: t.textTertiary, fontWeight: '400' }}>/ 7 days</Text>
+        </Text>
       </View>
       <BottomNav />
     </SafeAreaView>
