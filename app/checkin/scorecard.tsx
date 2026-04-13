@@ -34,18 +34,25 @@ export default function ScorecardScreen() {
   async function submit() {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
     const today = new Date().toISOString().split('T')[0]
     if (user) {
       await supabase.from('daily_scorecards').upsert({ user_id: user.id, date: today, ...scores })
       try {
         const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/insight`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+          },
           body: JSON.stringify({ date: today }),
         })
         const data = await res.json()
         setInsight(data.insight ?? '')
         setLowestDim(data.lowestDimension ?? '')
-      } catch {}
+      } catch (e) {
+        console.error('Insight fetch failed:', e)
+      }
     }
     // ── Mark done in store immediately — dashboard reads this, no async delay ──
     markScorecardDone()
