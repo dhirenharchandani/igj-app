@@ -13,17 +13,17 @@ import { Chip } from '../../src/components/ui/Chip'
 
 const CHIPS = {
   gratitude: [
-    'The relationships I've built',
-    'My health and ability to show up',
-    'The progress I've made, even if slow',
-    'My ability to learn and adapt',
+    "The relationships I've built",
+    "My health and ability to show up",
+    "The progress I've made, even if slow",
+    "My ability to learn and adapt",
   ],
   q1: ['Patient and deliberate', 'Fully present', 'Decisive', 'Disciplined', 'Calm under pressure'],
-  q2: ['Finishing what I started', 'The conversation I've been avoiding', 'Deep work, no distractions', 'The decision I've been putting off'],
-  q3: ['High — clear and focused', 'Low — didn't rest enough', 'Scattered — too many open loops', 'Anxious — avoiding something', 'Flat — disconnected from purpose'],
+  q2: ["Finishing what I started", "The conversation I've been avoiding", 'Deep work, no distractions', "The decision I've been putting off"],
+  q3: ['High — clear and focused', "Low — didn't rest enough", 'Scattered — too many open loops', 'Anxious — avoiding something', 'Flat — disconnected from purpose'],
   q4: ['Avoidance', 'Overthinking', 'Reactivity', 'Control', 'People-pleasing', 'Distraction'],
-  q5: ['I respond instead of react', 'I finish what I start', 'I do what I said I would', 'I don't complain, I solve', 'I show up fully, not partially'],
-  q6: ['I completed the one thing', 'I showed up as who I said I'd be', 'I closed the gap, even slightly', 'I moved the needle on what matters most'],
+  q5: ['I respond instead of react', 'I finish what I start', 'I do what I said I would', "I don't complain, I solve", 'I show up fully, not partially'],
+  q6: ['I completed the one thing', "I showed up as who I said I'd be", 'I closed the gap, even slightly', 'I moved the needle on what matters most'],
 }
 
 interface Form { gratitude: string; q1: string; q2: string; q3: string; q4: string; q5: string; q6: string }
