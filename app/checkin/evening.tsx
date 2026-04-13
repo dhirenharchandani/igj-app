@@ -78,25 +78,17 @@ function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips, on
 export default function EveningScreen() {
   const router = useRouter()
   const t      = useTheme()
-  const { markEveningDone, getTodayStatus } = useStore()
+  const { markEveningDone } = useStore()
   const [morningIntention, setMorningIntention] = useState('')
   const [morningDone, setMorningDone] = useState(false)
   const [form, setForm] = useState<Form>({ q1: '', q2: '', q3: '', q4: '', q5: '' })
   const [saving, setSaving] = useState(false)
-  // null = checking, true = done today, false = not done
-  // Seed from store so we skip the form immediately if we already know it's done
-  const [saved, setSaved] = useState<boolean | null>(() => {
-    const s = getTodayStatus()
-    return s.eveningDone ? null : false
-  })
+  // Always start null (loading) — never show blank form until Supabase confirms no data
+  const [saved, setSaved] = useState<boolean | null>(null)
 
-  // useFocusEffect: re-runs every time screen gains focus.
-  // Midnight reset is automatic — next day's date finds no data → fresh form.
+  // Re-runs every time the screen gains focus.
   useFocusEffect(useCallback(() => {
-    const storeStatus = getTodayStatus()
-    setSaved(storeStatus.eveningDone ? null : false)
-    // Seed from store immediately — avoids false "morning not done" flash
-    if (storeStatus.morningDone) setMorningDone(true)
+    setSaved(null) // show spinner while we check
 
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -122,11 +114,12 @@ export default function EveningScreen() {
         })
         setSaved(true)
       } else {
+        setForm({ q1: '', q2: '', q3: '', q4: '', q5: '' })
         setSaved(false)
       }
     }
     load()
-  }, [getTodayStatus]))
+  }, []))
 
   function set(k: keyof Form) {
     return (v: string) => setForm(f => ({ ...f, [k]: v }))

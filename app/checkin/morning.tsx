@@ -54,23 +54,17 @@ function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips }: 
 export default function MorningScreen() {
   const router = useRouter()
   const t = useTheme()
-  const { markMorningDone, getTodayStatus } = useStore()
+  const { markMorningDone } = useStore()
   const [form, setForm] = useState<Form>({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
   const [saving, setSaving] = useState(false)
-  // Seed from store immediately so we never show a blank form when we already know it's done
-  const [saved, setSaved] = useState<boolean | null>(() => {
-    const s = getTodayStatus()
-    return s.morningDone ? null : false  // null triggers load; false skips spinner and shows form
-  })
+  // Always start null (loading) — never show the blank form until we've checked Supabase
+  const [saved, setSaved] = useState<boolean | null>(null)
   const [eveningTime, setEveningTime] = useState('')
 
-  // useFocusEffect: re-runs every time the screen gains focus.
-  // This means: coming back from another tab, AND the next morning (new date → no data found → fresh form).
+  // Re-runs every time the screen gains focus.
+  // Always checks Supabase first — so on a new day, no data is found → fresh form automatically.
   useFocusEffect(useCallback(() => {
-    const storeStatus = getTodayStatus()
-    // Only show spinner if store thinks it's done (need to load the actual responses)
-    // If store says not done, jump straight to the form (no spinner)
-    setSaved(storeStatus.morningDone ? null : false)
+    setSaved(null) // show spinner while we check
 
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -82,13 +76,13 @@ export default function MorningScreen() {
           .eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('user_profiles').select('evening_time').eq('id', user.id).maybeSingle(),
       ])
-      // Format the evening scheduled time for the reminder
       if (profile?.evening_time) {
         const [h, m] = (profile.evening_time as string).split(':').map(Number)
         const fmt = new Date(); fmt.setHours(h, m, 0)
         setEveningTime(fmt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))
       }
       if (data) {
+        // Data found — populate form and show recap
         setForm({
           gratitude: data.gratitude_entry ?? '',
           q1: data.q1_intention ?? '',
@@ -100,11 +94,13 @@ export default function MorningScreen() {
         })
         setSaved(true)
       } else {
+        // No data for today — show the blank form
+        setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
         setSaved(false)
       }
     }
     load()
-  }, [getTodayStatus]))
+  }, []))
 
   function set(k: keyof Form) {
     return (v: string) => setForm(f => ({ ...f, [k]: v }))
