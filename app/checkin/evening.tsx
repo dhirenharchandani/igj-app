@@ -10,7 +10,40 @@ import { Input } from '../../src/components/ui/Input'
 import { Btn } from '../../src/components/ui/Btn'
 import { Chip } from '../../src/components/ui/Chip'
 
-const PATTERN_CHIPS = ['Avoidance', 'Overthinking', 'Reactivity', 'People-pleasing', 'Distraction', 'Seeking validation']
+const CHIPS = {
+  q1: [
+    "Mostly yes — I held the standard when it counted",
+    "Partially — I showed up early but slipped later",
+    "I caught myself and course-corrected",
+    "Not quite — the pattern I said I'd watch showed up anyway",
+    "No — the day ran me instead of me running the day",
+  ],
+  q2: [
+    'Avoidance', 'Overthinking', 'Reactivity', 'People-pleasing',
+    'Distraction', 'Seeking validation', 'Procrastination', 'Perfectionism',
+  ],
+  q3: [
+    "I knew what mattered but chased what was urgent instead",
+    "I said I'd be present but kept getting pulled away",
+    "I planned to have a hard conversation and avoided it again",
+    "I started strong but lost focus halfway through",
+    "I reacted instead of responding when things got tense",
+  ],
+  q4: [
+    "The pattern shows up when I'm tired — protect energy earlier",
+    "I can't wait for motivation — move first, it follows",
+    "Avoiding the conversation always costs more than having it",
+    "Where I lowered my standard today is where I need to raise it",
+    "I showed myself I can hold the line under pressure",
+  ],
+  q5: [
+    "Start with the hardest thing before the day takes over",
+    "Protect the first hour — no phone, just intention",
+    "Have the conversation I've been avoiding",
+    "Move my body before I sit down to work",
+    "Say no to one thing that doesn't align with my priority",
+  ],
+}
 
 interface Form { q1: string; q2: string; q3: string; q4: string; q5: string }
 
@@ -137,36 +170,37 @@ export default function EveningScreen() {
             sub="Not pass or fail. Just honest."
             value={form.q1} onChangeText={set('q1')}
             placeholder="I showed up as… / I didn't show up as…"
+            chips={CHIPS.q1} onChipPress={set('q1')}
           />
 
-          <View style={s.qBlock}>
-            <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>
-              What pattern showed up today that I didn't want?
-            </Text>
-            <Text style={[s.qSub, { color: t.textSecondary }]}>Name the pattern, not just the event.</Text>
-            <Input value={form.q2} onChangeText={set('q2')} placeholder="The pattern that showed up was…" multiline numberOfLines={3} focusColor="blue" />
-            <View style={s.chips}>
-              {PATTERN_CHIPS.map(c => <Chip key={c} label={c} onPress={() => setForm(f => ({ ...f, q2: c }))} />)}
-            </View>
-          </View>
+          <QuestionBlock
+            label="What pattern showed up today that I didn't want?"
+            sub="Name the pattern, not just the event."
+            value={form.q2} onChangeText={set('q2')}
+            placeholder="The pattern that showed up was…"
+            chips={CHIPS.q2} onChipPress={set('q2')}
+          />
 
           <QuestionBlock
             label="Where was the gap between my intention and my execution?"
             sub="Be specific. 'Everywhere' isn't an answer."
             value={form.q3} onChangeText={set('q3')}
             placeholder="The gap lived in…"
+            chips={CHIPS.q3} onChipPress={set('q3')}
           />
           <QuestionBlock
             label="What's the one thing I'm taking from today?"
             sub="One thing. Distill it."
             value={form.q4} onChangeText={set('q4')}
             placeholder="Today taught me…"
+            chips={CHIPS.q4} onChipPress={set('q4')}
           />
           <QuestionBlock
             label="What needs to shift tomorrow?"
             sub="Not a to-do list. What actually needs to change."
             value={form.q5} onChangeText={set('q5')}
             placeholder="Tomorrow I need to shift…"
+            chips={CHIPS.q5} onChipPress={set('q5')}
           />
 
           <Btn label={saving ? 'Saving…' : 'Complete evening →'} onPress={save} variant="blue" loading={saving} />
