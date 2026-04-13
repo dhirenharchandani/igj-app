@@ -44,18 +44,25 @@ export default function WeeklyScorecardScreen() {
   async function submit() {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
     const weekStart = getWeekStart()
     if (user) {
       await supabase.from('weekly_scorecards').upsert({ user_id: user.id, week_start: weekStart, ...scores })
       try {
         const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/weekly-reflection`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+          },
           body: JSON.stringify({ weekStart }),
         })
         const data = await res.json()
         setReflection(data.reflection ?? '')
         setFocus(data.suggestedShift ?? '')
-      } catch {}
+      } catch (e) {
+        console.error('Weekly reflection fetch failed:', e)
+      }
     }
     setLoading(false)
   }

@@ -81,8 +81,8 @@ export default function LearnScreen() {
               <View style={{ flex: 1 }}>
                 <View style={s.chMeta}>
                   <Text style={[s.chNum, { color: t.gray }]}>Ch.{ch.num}</Text>
-                  <View style={[s.tag, { backgroundColor: t.bg3 }]}>
-                    <Text style={[s.tagText, { color: t.textTertiary }]}>{ch.tag}</Text>
+                  <View style={[s.tag, { backgroundColor: t.bg3, borderWidth: 1, borderColor: t.border }]}>
+                    <Text style={[s.tagText, { color: t.gray }]}>{ch.tag}</Text>
                   </View>
                 </View>
                 <Text style={[s.chTitle, { color: t.textPrimary }]}>{ch.title}</Text>

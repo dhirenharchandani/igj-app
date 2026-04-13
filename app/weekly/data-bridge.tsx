@@ -25,11 +25,17 @@ export default function DataBridgeScreen() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // Check unlock status — fetch all morning check-in dates
-      const { data: allMornings } = await supabase
-        .from('morning_checkins').select('date').eq('user_id', user.id).order('date', { ascending: true })
-      const morningDates = (allMornings ?? []).map((r: { date: string }) => r.date)
-      const total = morningDates.length
+      // Check unlock status — fetch all check-in dates (morning + evening)
+      const [{ data: allMornings }, { data: allEvenings }] = await Promise.all([
+        supabase.from('morning_checkins').select('date').eq('user_id', user.id),
+        supabase.from('evening_checkins').select('date').eq('user_id', user.id),
+      ])
+      const allDateSet = new Set([
+        ...(allMornings ?? []).map((r: { date: string }) => r.date),
+        ...(allEvenings ?? []).map((r: { date: string }) => r.date),
+      ])
+      const morningDates = [...allDateSet].sort()
+      const total = allDateSet.size
       const first = morningDates[0]
       const sinceFirst = first
         ? Math.floor((Date.now() - new Date(first + 'T12:00:00').getTime()) / 86400000)
