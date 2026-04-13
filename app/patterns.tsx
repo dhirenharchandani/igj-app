@@ -12,6 +12,16 @@ import { BarChart } from 'react-native-gifted-charts'
 
 const { width } = Dimensions.get('window')
 
+const STOP_WORDS = new Set([
+  'i','the','a','an','my','was','is','it','to','of','and','but','that','this',
+  'in','on','at','for','with','have','not','me','up','be','do','so','if','as',
+  'by','we','or','are','had','has','been','from','more','when','just','its',
+  'feel','felt','really','very','what','how','then','about','which','were',
+  'get','got','can','like','also','too','all','one','more','into','out','did',
+  'no','so','some','they','them','their','would','could','should','will',
+  'there','than','after','before','time','day','today','now','still',
+])
+
 interface DailyScore { date: string; awareness: number; intention: number; state: number; presence: number; ownership: number }
 interface WeeklyScore { week_start: string; clarity: number; ownership: number; presence: number; standards: number; courage: number; growth: number }
 interface Insight { id: string; date: string; insight_text: string }
@@ -26,27 +36,73 @@ export default function PatternsScreen() {
   const [activeWeekly, setActiveWeekly] = useState('clarity')
   const [expanded, setExpanded]       = useState<string | null>(null)
   const [loading, setLoading]         = useState(true)
+  const [activityMap, setActivityMap] = useState<Map<string, { morning: boolean; evening: boolean }>>(new Map())
+  const [topKeywords, setTopKeywords] = useState<{ word: string; count: number }[]>([])
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
-      const eightWeeksAgo = new Date(Date.now() - 56 * 86400000).toISOString().split('T')[0]
+      const thirtyDaysAgo  = new Date(Date.now() - 30  * 86400000).toISOString().split('T')[0]
+      const ninetyDaysAgo  = new Date(Date.now() - 90  * 86400000).toISOString().split('T')[0]
+      const eightWeeksAgo  = new Date(Date.now() - 56  * 86400000).toISOString().split('T')[0]
 
-      const [{ data: allMornings }, { data: allEvenings }, { data: daily }, { data: weekly }, { data: insightRows }] = await Promise.all([
-        supabase.from('morning_checkins').select('date').eq('user_id', user.id),
-        supabase.from('evening_checkins').select('date').eq('user_id', user.id),
+      const [
+        { data: allMornings },
+        { data: allEvenings },
+        { data: recentEvenings },
+        { data: daily },
+        { data: weekly },
+        { data: insightRows },
+      ] = await Promise.all([
+        supabase.from('morning_checkins').select('date').eq('user_id', user.id).gte('date', ninetyDaysAgo),
+        supabase.from('evening_checkins').select('date').eq('user_id', user.id).gte('date', ninetyDaysAgo),
+        supabase.from('evening_checkins').select('q2_pattern,q4_learning,date').eq('user_id', user.id).gte('date', thirtyDaysAgo),
         supabase.from('daily_scorecards').select('*').eq('user_id', user.id).gte('date', thirtyDaysAgo).order('date'),
         supabase.from('weekly_scorecards').select('*').eq('user_id', user.id).gte('week_start', eightWeeksAgo).order('week_start'),
         supabase.from('daily_insights').select('id,date,insight_text').eq('user_id', user.id).eq('is_saved', true).order('date', { ascending: false }),
       ])
 
+      // Day count (union of all-time mornings + evenings for the streak display)
       const uniqueDays = new Set([
         ...(allMornings ?? []).map((r: { date: string }) => r.date),
         ...(allEvenings ?? []).map((r: { date: string }) => r.date),
       ])
       setDayCount(uniqueDays.size)
+
+      // Build activity map for heatmap (last 90 days)
+      const aMap = new Map<string, { morning: boolean; evening: boolean }>()
+      ;(allMornings ?? []).forEach((r: { date: string }) => {
+        const entry = aMap.get(r.date) ?? { morning: false, evening: false }
+        entry.morning = true
+        aMap.set(r.date, entry)
+      })
+      ;(allEvenings ?? []).forEach((r: { date: string }) => {
+        const entry = aMap.get(r.date) ?? { morning: false, evening: false }
+        entry.evening = true
+        aMap.set(r.date, entry)
+      })
+      setActivityMap(aMap)
+
+      // Build top keywords from last 30 days evening checkins
+      const wordCounts = new Map<string, number>()
+      ;(recentEvenings ?? []).forEach((row: { q2_pattern?: string; q4_learning?: string }) => {
+        const text = [row.q2_pattern ?? '', row.q4_learning ?? ''].join(' ')
+        text
+          .toLowerCase()
+          .replace(/[^a-z\s]/g, ' ')
+          .split(/\s+/)
+          .forEach(w => {
+            if (w.length < 3 || STOP_WORDS.has(w)) return
+            wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1)
+          })
+      })
+      const sorted = Array.from(wordCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([word, count]) => ({ word: word.charAt(0).toUpperCase() + word.slice(1), count }))
+      setTopKeywords(sorted)
+
       setDailyScores(daily ?? [])
       setWeeklyScores(weekly ?? [])
       setInsights(insightRows ?? [])
@@ -98,6 +154,52 @@ export default function PatternsScreen() {
     frontColor: getScoreColor((d[activeWeekly as keyof WeeklyScore] as number) ?? 0),
   }))
 
+  // Build 84-day grid: 12 columns (weeks) x 7 rows (Mon–Sun), newest week on right
+  const today = new Date()
+  // Align to most recent Sunday so grid fills neatly right-to-left
+  const dayOfWeek = today.getDay() // 0=Sun,1=Mon,...,6=Sat
+  // We want the grid rows to be Mon(0)..Sun(6). Find offset to last Sunday.
+  const daysToFill = 84 // 12 weeks
+  // Build array of 84 dates oldest→newest
+  const gridDates: string[] = []
+  for (let i = daysToFill - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(today.getDate() - i)
+    gridDates.push(d.toISOString().split('T')[0])
+  }
+
+  // Determine the day-of-week index of the first date (Mon=0..Sun=6)
+  function dowIndex(dateStr: string): number {
+    const d = new Date(dateStr + 'T00:00:00')
+    return (d.getDay() + 6) % 7 // Mon=0, Tue=1, ..., Sun=6
+  }
+
+  // Arrange into columns: each column is one week (7 slots Mon–Sun)
+  // We pad the front so the first date lands on the correct row
+  const firstDow = dowIndex(gridDates[0])
+  // Total cells = 12 cols × 7 rows. We'll build a flat array of (dateStr|null).
+  const totalCells = 12 * 7
+  const paddedDates: (string | null)[] = Array(firstDow).fill(null).concat(gridDates)
+  // Trim or extend to exactly totalCells
+  while (paddedDates.length < totalCells) paddedDates.push(null)
+  const cells = paddedDates.slice(0, totalCells)
+
+  // Split into columns of 7
+  const columns: (string | null)[][] = []
+  for (let col = 0; col < 12; col++) {
+    columns.push(cells.slice(col * 7, col * 7 + 7))
+  }
+
+  function heatColor(dateStr: string | null): string {
+    if (!dateStr) return 'transparent'
+    const entry = activityMap.get(dateStr)
+    if (!entry) return t.bg3
+    if (entry.morning && entry.evening) return t.teal
+    if (entry.morning) return t.blue
+    if (entry.evening) return t.purple
+    return t.bg3
+  }
+
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       <View style={[s.header, { borderBottomColor: t.border }]}>
@@ -106,6 +208,42 @@ export default function PatternsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll}>
+
+        {/* Activity heatmap */}
+        <Text style={[s.sectionTitle, { color: t.textPrimary }]}>Activity</Text>
+        <Card style={{ marginBottom: 20 }}>
+          <View style={s.heatmapRow}>
+            {columns.map((col, ci) => (
+              <View key={ci} style={s.heatmapCol}>
+                {col.map((dateStr, ri) => (
+                  <View
+                    key={ri}
+                    style={[
+                      s.heatCell,
+                      {
+                        backgroundColor: heatColor(dateStr),
+                        borderWidth: dateStr ? 0 : 0,
+                        opacity: dateStr ? 1 : 0,
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+            ))}
+          </View>
+          {/* Legend */}
+          <View style={s.heatLegend}>
+            <View style={[s.heatLegendDot, { backgroundColor: t.teal }]} />
+            <Text style={[s.heatLegendLabel, { color: t.textTertiary }]}>Both</Text>
+            <View style={[s.heatLegendDot, { backgroundColor: t.blue, marginLeft: 10 }]} />
+            <Text style={[s.heatLegendLabel, { color: t.textTertiary }]}>Morning</Text>
+            <View style={[s.heatLegendDot, { backgroundColor: t.purple, marginLeft: 10 }]} />
+            <Text style={[s.heatLegendLabel, { color: t.textTertiary }]}>Evening</Text>
+            <View style={[s.heatLegendDot, { backgroundColor: t.bg3, marginLeft: 10, borderWidth: 1, borderColor: t.border }]} />
+            <Text style={[s.heatLegendLabel, { color: t.textTertiary }]}>None</Text>
+          </View>
+        </Card>
+
         {/* Daily chart */}
         <Card style={{ marginBottom: 16 }}>
           <Text style={[s.chartTitle, { color: t.textPrimary }]}>Daily scorecard trends</Text>
@@ -164,6 +302,28 @@ export default function PatternsScreen() {
           )}
         </Card>
 
+        {/* Top keywords */}
+        {topKeywords.length > 0 && (
+          <View style={{ marginBottom: 20 }}>
+            <Text style={[s.sectionTitle, { color: t.textPrimary }]}>Your recurring patterns</Text>
+            <Card>
+              <View style={s.keywordRow}>
+                {topKeywords.map(({ word, count }) => (
+                  <View
+                    key={word}
+                    style={[s.keywordChip, { backgroundColor: t.bg2, borderColor: t.border }]}
+                  >
+                    <Text style={[s.keywordWord, { color: t.textPrimary }]}>{word}</Text>
+                    <View style={[s.keywordBadge, { backgroundColor: t.teal }]}>
+                      <Text style={[s.keywordCount, { color: t.bg }]}>×{count}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </Card>
+          </View>
+        )}
+
         {/* Saved insights */}
         {insights.length > 0 && (
           <View>
@@ -196,19 +356,34 @@ export default function PatternsScreen() {
 }
 
 const s = StyleSheet.create({
-  safe:         { flex: 1 },
-  header:       { padding: 20, paddingBottom: 16, borderBottomWidth: 1 },
-  eyebrow:      { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 4 },
-  title:        { fontSize: 20, lineHeight: 27 },
-  scroll:       { padding: 20, paddingBottom: 100 },
-  chartTitle:   { fontSize: 13, fontWeight: '600', marginBottom: 16 },
-  chips:        { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 },
-  noData:       { fontSize: 13 },
-  insightsTitle:{ fontSize: 13, fontWeight: '600', marginBottom: 12 },
-  insightCard:  { borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 10 },
-  insightHeader:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  insightDate:  { fontSize: 12 },
-  dailyBadge:   { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  dailyBadgeText:{ fontSize: 10 },
-  insightText:  { fontSize: 14, lineHeight: 23, marginTop: 12 },
+  safe:           { flex: 1 },
+  header:         { padding: 20, paddingBottom: 16, borderBottomWidth: 1 },
+  eyebrow:        { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 4 },
+  title:          { fontSize: 20, lineHeight: 27 },
+  scroll:         { padding: 20, paddingBottom: 100 },
+  sectionTitle:   { fontSize: 13, fontWeight: '600', marginBottom: 12 },
+  chartTitle:     { fontSize: 13, fontWeight: '600', marginBottom: 16 },
+  chips:          { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 },
+  noData:         { fontSize: 13 },
+  // Heatmap
+  heatmapRow:     { flexDirection: 'row', gap: 4 },
+  heatmapCol:     { flexDirection: 'column', gap: 4 },
+  heatCell:       { width: 10, height: 10, borderRadius: 2 },
+  heatLegend:     { flexDirection: 'row', alignItems: 'center', marginTop: 12, flexWrap: 'wrap', gap: 4 },
+  heatLegendDot:  { width: 10, height: 10, borderRadius: 2 },
+  heatLegendLabel:{ fontSize: 10, marginLeft: 4 },
+  // Keywords
+  keywordRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  keywordChip:    { flexDirection: 'row', alignItems: 'center', borderRadius: 20, borderWidth: 1, paddingVertical: 5, paddingLeft: 12, paddingRight: 6, gap: 6 },
+  keywordWord:    { fontSize: 13, fontWeight: '500' },
+  keywordBadge:   { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
+  keywordCount:   { fontSize: 10, fontWeight: '600' },
+  // Insights
+  insightsTitle:  { fontSize: 13, fontWeight: '600', marginBottom: 12 },
+  insightCard:    { borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 10 },
+  insightHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  insightDate:    { fontSize: 12 },
+  dailyBadge:     { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  dailyBadgeText: { fontSize: 10 },
+  insightText:    { fontSize: 14, lineHeight: 23, marginTop: 12 },
 })

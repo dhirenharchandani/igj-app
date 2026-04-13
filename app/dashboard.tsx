@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -14,10 +14,12 @@ import { getRecommendedChapter } from '../src/lib/utils/pillars'
 
 interface RecentEntry { date: string; total: number | null; morningDone: boolean; eveningDone: boolean }
 
+interface ScorecardRow { date: string; awareness: number; intention: number; state: number; presence: number; ownership: number }
+
 interface DashState {
   streak: number; longestStreak: number; totalDays: number
   lowestDim: string; gapText: string; todayScore: number | null
-  recentEntries: RecentEntry[]; insightText: string
+  recentEntries: RecentEntry[]; recentScorecards: ScorecardRow[]; insightText: string
   milestoneShown: boolean; milestoneSummary: string; loadingMilestone: boolean
   morningDone: boolean; eveningDone: boolean; scorecardDone: boolean; weeklyResetDone: boolean
   weeklyUnlocked: boolean
@@ -67,14 +69,14 @@ export default function DashboardScreen() {
   const router  = useRouter()
   const t       = useTheme()
   const sunday  = isSunday()
-  const { getTodayStatus } = useStore()
+  const { getTodayStatus, profile } = useStore()
 
   const [state, setState] = useState<DashState>(() => {
     // Seed from store immediately — no async delay, no flash of wrong state
     const stored = getTodayStatus()
     return {
       streak: 0, longestStreak: 0, totalDays: 0, lowestDim: '', gapText: '',
-      todayScore: null, recentEntries: [], insightText: '',
+      todayScore: null, recentEntries: [], recentScorecards: [], insightText: '',
       milestoneShown: false, milestoneSummary: '', loadingMilestone: false,
       morningDone: stored.morningDone,
       eveningDone: stored.eveningDone,
@@ -105,7 +107,7 @@ export default function DashboardScreen() {
       const weekStart = getWeekStart()
 
       const [
-        { data: profile },
+        { data: supaProfile },
         { data: morning },
         { data: evening },
         { data: scorecard },
@@ -122,7 +124,7 @@ export default function DashboardScreen() {
         supabase.from('daily_scorecards').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('weekly_resets').select('id').eq('user_id', user.id).eq('week_start', weekStart).maybeSingle(),
         supabase.from('daily_scorecards').select('awareness,intention,state,presence,ownership').eq('user_id', user.id).eq('date', today).maybeSingle(),
-        supabase.from('daily_scorecards').select('date,awareness,intention,state,presence,ownership').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
+        supabase.from('daily_scorecards').select('date,awareness,intention,state,presence,ownership').eq('user_id', user.id).order('date', { ascending: false }).limit(14),
         supabase.from('morning_checkins').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(100),
         supabase.from('evening_checkins').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
         supabase.from('daily_insights').select('insight_text').eq('user_id', user.id).eq('date', today).maybeSingle(),
@@ -156,7 +158,7 @@ export default function DashboardScreen() {
           .filter((v): v is number => typeof v === 'number')
         if (vals.length) scoreMap.set(sc.date as string, Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10)
       })
-      const recentEntries: RecentEntry[] = Array.from({ length: 5 }, (_, i) => {
+      const recentEntries: RecentEntry[] = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(); d.setDate(d.getDate() - i)
         const dateStr = d.toISOString().split('T')[0]
         return { date: dateStr, total: scoreMap.get(dateStr) ?? null, morningDone: morningDates.has(dateStr), eveningDone: eveningDates.has(dateStr) }
@@ -181,9 +183,9 @@ export default function DashboardScreen() {
         longestStreak: streakData.longest,
         totalDays: streakData.total,
         weeklyUnlocked,
-        lowestDim, gapText: profile?.identity_gap_text ?? '',
-        eveningTime: (profile?.evening_time ?? '21:00:00').slice(0, 5),
-        todayScore: todayScoreVal, recentEntries,
+        lowestDim, gapText: supaProfile?.identity_gap_text ?? '',
+        eveningTime: (supaProfile?.evening_time ?? '21:00:00').slice(0, 5),
+        todayScore: todayScoreVal, recentEntries, recentScorecards: (recentScorecards ?? []) as ScorecardRow[],
         insightText: insight?.insight_text ?? '',
         milestoneShown: showMilestone,
         morningDone: !!morning || storeStatus.morningDone,
@@ -198,7 +200,7 @@ export default function DashboardScreen() {
         try {
           const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/streak-summary`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ streakDays: currentStreak }),
+            body: JSON.stringify({ streakDays: streakData.current }),
           })
           const data = await res.json()
           setState(prev => ({ ...prev, milestoneSummary: data.summary ?? '', loadingMilestone: false }))
@@ -263,6 +265,55 @@ export default function DashboardScreen() {
   const phaseStatus = [state.morningDone, state.eveningDone, state.scorecardDone]
   const recommended = getRecommendedChapter(state.lowestDim)
 
+  // ── Personalised greeting ──
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours()
+    const timeWord = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+    const name = profile.display_name?.trim()
+    return name ? `Good ${timeWord}, ${name}` : `Good ${timeWord}`
+  }, [profile.display_name])
+
+  // ── 7-day activity strip ──
+  const activityDays = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (6 - i))
+      const dateStr = d.toISOString().split('T')[0]
+      const entry = state.recentEntries.find(e => e.date === dateStr)
+      const today = new Date().toISOString().split('T')[0]
+      const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      return {
+        dateStr,
+        label: DAY_LABELS[d.getDay()],
+        morningDone: entry?.morningDone ?? false,
+        eveningDone: entry?.eveningDone ?? false,
+        isToday: dateStr === today,
+      }
+    })
+  }, [state.recentEntries])
+
+  // ── Week-over-week score trend ──
+  const weekTrend = useMemo(() => {
+    function avgScore(rows: ScorecardRow[]): number | null {
+      const scores = rows.map(sc => {
+        const vals = [sc.awareness, sc.intention, sc.state, sc.presence, sc.ownership].filter((v): v is number => typeof v === 'number' && v > 0)
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+      }).filter((v): v is number => v !== null)
+      return scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null
+    }
+    const today = new Date()
+    const cutoff7 = new Date(today); cutoff7.setDate(cutoff7.getDate() - 7)
+    const cutoff14 = new Date(today); cutoff14.setDate(cutoff14.getDate() - 14)
+    const c7 = cutoff7.toISOString().split('T')[0]
+    const c14 = cutoff14.toISOString().split('T')[0]
+    const todayStr = today.toISOString().split('T')[0]
+    const thisWeek = state.recentScorecards.filter(sc => sc.date >= c7 && sc.date <= todayStr)
+    const lastWeek = state.recentScorecards.filter(sc => sc.date >= c14 && sc.date < c7)
+    const thisAvg = avgScore(thisWeek)
+    const lastAvg = avgScore(lastWeek)
+    if (thisAvg === null || lastAvg === null) return null
+    return Math.round((thisAvg - lastAvg) * 10) / 10
+  }, [state.recentScorecards])
+
   function fmtDate(dateStr: string) {
     const today = new Date().toISOString().split('T')[0]
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
@@ -286,7 +337,7 @@ export default function DashboardScreen() {
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       {/* Header */}
       <View style={[s.header, { borderBottomColor: t.border }]}>
-        <Text style={[s.logo, { color: t.teal }]}>Inner Game Journal</Text>
+        <Text style={[s.logo, { color: t.textPrimary }]}>{greeting}</Text>
         <View style={[s.streakBadge, { backgroundColor: t.bg3, borderColor: t.border }]}>
           <Text style={s.fire}>🔥</Text>
           <Text style={[s.streakText, { color: t.textPrimary }]}>{state.streak} day{state.streak !== 1 ? 's' : ''}</Text>
@@ -308,6 +359,29 @@ export default function DashboardScreen() {
             </View>
           ))}
         </View>
+
+        {/* 7-day activity strip */}
+        <View style={[s.activityStrip, { backgroundColor: t.bg2, borderColor: t.border }]}>
+          {activityDays.map(day => {
+            const bothDone = day.morningDone && day.eveningDone
+            const symbol = bothDone ? '✓' : day.morningDone ? '☀️' : day.eveningDone ? '🌙' : '·'
+            const symbolColor = bothDone ? t.teal : (day.morningDone || day.eveningDone) ? t.textSecondary : t.textTertiary
+            return (
+              <View key={day.dateStr} style={[s.activityCol, day.isToday && { backgroundColor: t.bg3, borderRadius: 8 }]}>
+                <Text style={[s.activitySymbol, { color: symbolColor, fontSize: bothDone ? 12 : (day.morningDone || day.eveningDone) ? 14 : 18 }]}>{symbol}</Text>
+                <Text style={[s.activityLabel, { color: day.isToday ? t.teal : t.textTertiary }]}>{day.label}</Text>
+              </View>
+            )
+          })}
+        </View>
+
+        {/* Identity gap card */}
+        {!!state.gapText && (
+          <View style={[s.gapCard, { backgroundColor: t.bg2, borderLeftColor: t.teal }]}>
+            <Text style={[s.gapLabel, { color: t.teal }]}>YOUR MISSION</Text>
+            <Text style={[s.gapText, { color: t.textPrimary }]}>{`"${state.gapText}"`}</Text>
+          </View>
+        )}
 
         {/* Hero CTA */}
         <View style={[s.heroCard, { backgroundColor: t.bg2, borderLeftColor: hero.color }]}>
@@ -341,13 +415,20 @@ export default function DashboardScreen() {
           {[
             { label: 'Streak',  value: `${state.streak}d` },
             { label: 'Longest', value: `${state.longestStreak}d` },
-            { label: 'Total',   value: `${state.totalDays}d` },
           ].map(stat => (
             <View key={stat.label} style={[s.statBox, { backgroundColor: t.bg3, borderColor: t.border }]}>
               <Text style={[s.statValue, { color: t.textPrimary }]}>{stat.value}</Text>
               <Text style={[s.statLabel, { color: t.textTertiary }]}>{stat.label}</Text>
             </View>
           ))}
+          <View style={[s.statBox, { backgroundColor: t.bg3, borderColor: t.border }]}>
+            <Text style={[s.statValue, {
+              color: weekTrend === null ? t.textTertiary : weekTrend >= 0 ? t.teal : t.coral
+            }]}>
+              {weekTrend === null ? '–' : weekTrend >= 0 ? `↑ +${weekTrend}` : `↓ ${weekTrend}`}
+            </Text>
+            <Text style={[s.statLabel, { color: t.textTertiary }]}>vs last wk</Text>
+          </View>
         </View>
 
         {/* Recent entries */}
@@ -451,7 +532,7 @@ export default function DashboardScreen() {
 const s = StyleSheet.create({
   safe:          { flex: 1 },
   header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingHorizontal: 20, borderBottomWidth: 1 },
-  logo:          { fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
+  logo:          { fontSize: 16, fontWeight: '600', letterSpacing: 0.2 },
   streakBadge:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
   fire:          { fontSize: 14 },
   streakText:    { fontSize: 13, fontWeight: '600' },
@@ -492,6 +573,13 @@ const s = StyleSheet.create({
   tile:          { borderRadius: 14, padding: 14, paddingHorizontal: 16, borderWidth: 1 },
   tileText:      { fontSize: 13, fontWeight: '500' },
   tileSub:       { fontSize: 10, marginTop: 3 },
+  activityStrip: { flexDirection: 'row', justifyContent: 'space-between', borderRadius: 14, borderWidth: 1, padding: 12, marginBottom: 14 },
+  activityCol:   { flex: 1, alignItems: 'center', paddingVertical: 6, paddingHorizontal: 2 },
+  activitySymbol:{ marginBottom: 4, textAlign: 'center' },
+  activityLabel: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  gapCard:       { borderRadius: 14, padding: 16, borderLeftWidth: 3, marginBottom: 16 },
+  gapLabel:      { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 8 },
+  gapText:       { fontSize: 15, lineHeight: 24, fontStyle: 'italic', fontFamily: 'DMSerifDisplay_400Regular_Italic' },
   modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalSheet:    { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 28, paddingBottom: 40 },
   milestoneLabel:{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 12 },

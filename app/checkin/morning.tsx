@@ -1,8 +1,10 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useFocusEffect } from '@react-navigation/native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as Haptics from 'expo-haptics'
 import { useTheme } from '../../src/ThemeContext'
 import { useStore } from '../../src/lib/store'
 import { supabase } from '../../src/lib/supabase'
@@ -29,6 +31,10 @@ const CHIPS = {
 
 interface Form { gratitude: string; q1: string; q2: string; q3: string; q4: string; q5: string; q6: string }
 
+function wordCount(value: string): number {
+  return value.trim().split(/\s+/).filter(Boolean).length
+}
+
 // ── Outside component to prevent keyboard-dismissal on keystroke ──
 type QProps = {
   label: string; sub: string; value: string
@@ -37,11 +43,15 @@ type QProps = {
 
 function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips }: QProps) {
   const t = useTheme()
+  const count = wordCount(value)
   return (
     <View style={s.qBlock}>
       <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>{label}</Text>
       <Text style={[s.qSub, { color: t.textSecondary }]}>{sub}</Text>
       <Input value={value} onChangeText={onChangeText} placeholder={placeholder} multiline numberOfLines={3} focusColor="blue" />
+      {value.length > 0 && (
+        <Text style={[s.wordCount, { color: t.textTertiary }]}>{count} {count === 1 ? 'word' : 'words'}</Text>
+      )}
       {chips && (
         <View style={s.chips}>
           {chips.map(c => <Chip key={c} label={c} onPress={() => onChangeText(c)} />)}
@@ -60,6 +70,8 @@ export default function MorningScreen() {
   // Always start null (loading) — never show the blank form until we've checked Supabase
   const [saved, setSaved] = useState<boolean | null>(null)
   const [eveningTime, setEveningTime] = useState('')
+  const [yesterdayWin, setYesterdayWin] = useState('')
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Re-runs every time the screen gains focus.
   // Always checks Supabase first — so on a new day, no data is found → fresh form automatically.
@@ -70,16 +82,23 @@ export default function MorningScreen() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setSaved(false); return }
       const today = new Date().toISOString().split('T')[0]
-      const [{ data }, { data: profile }] = await Promise.all([
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+      const [{ data }, { data: profile }, { data: winData }] = await Promise.all([
         supabase.from('morning_checkins')
           .select('gratitude_entry,q1_intention,q2_focus,q3_energy,q4_pattern,q5_standard,q6_win')
           .eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('user_profiles').select('evening_time').eq('id', user.id).maybeSingle(),
+        supabase.from('morning_checkins').select('q6_win').eq('user_id', user.id).eq('date', yesterday).maybeSingle(),
       ])
       if (profile?.evening_time) {
         const [h, m] = (profile.evening_time as string).split(':').map(Number)
         const fmt = new Date(); fmt.setHours(h, m, 0)
         setEveningTime(fmt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))
+      }
+      if (winData?.q6_win) {
+        setYesterdayWin(winData.q6_win)
+      } else {
+        setYesterdayWin('')
       }
       if (data) {
         // Data found — populate form and show recap
@@ -94,16 +113,42 @@ export default function MorningScreen() {
         })
         setSaved(true)
       } else {
-        // No data for today — show the blank form
-        setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
+        // No data for today — check AsyncStorage for a draft
+        const draftKey = `igj_morning_draft_${today}`
+        try {
+          const raw = await AsyncStorage.getItem(draftKey)
+          if (raw) {
+            const draft = JSON.parse(raw) as Partial<Form>
+            setForm(f => ({ ...f, ...draft }))
+          } else {
+            setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
+          }
+        } catch {
+          setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
+        }
         setSaved(false)
       }
     }
     load()
   }, []))
 
+  function scheduleDraftSave(nextForm: Form) {
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    draftTimerRef.current = setTimeout(async () => {
+      const today = new Date().toISOString().split('T')[0]
+      const draftKey = `igj_morning_draft_${today}`
+      try {
+        await AsyncStorage.setItem(draftKey, JSON.stringify(nextForm))
+      } catch { /* ignore storage errors */ }
+    }, 1500)
+  }
+
   function set(k: keyof Form) {
-    return (v: string) => setForm(f => ({ ...f, [k]: v }))
+    return (v: string) => setForm(f => {
+      const next = { ...f, [k]: v }
+      scheduleDraftSave(next)
+      return next
+    })
   }
 
   async function save() {
@@ -119,6 +164,12 @@ export default function MorningScreen() {
       await updateStreak(user.id, supabase)
     }
     markMorningDone()
+    // Clear draft after successful save
+    try {
+      const today2 = new Date().toISOString().split('T')[0]
+      await AsyncStorage.removeItem(`igj_morning_draft_${today2}`)
+    } catch { /* ignore */ }
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setSaving(false)
     setSaved(true)
   }
@@ -186,6 +237,7 @@ export default function MorningScreen() {
   }
 
   // ── Not done yet — show the form ──
+  const gratitudeWordCount = wordCount(form.gratitude)
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       <View style={[s.tabBar, { backgroundColor: t.bg2, borderBottomColor: t.border }]}>
@@ -204,6 +256,14 @@ export default function MorningScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
 
+          {/* Yesterday's win mirror */}
+          {yesterdayWin.length > 0 && (
+            <View style={[s.yesterdayCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.amber }]}>
+              <Text style={[s.yesterdayLabel, { color: t.amber }]}>YESTERDAY'S WIN</Text>
+              <Text style={[s.yesterdayText, { color: t.textSecondary }]}>"{yesterdayWin}"</Text>
+            </View>
+          )}
+
           <View style={s.qBlock}>
             <Text style={[s.sectionLabel, { color: t.textTertiary }]}>State primer</Text>
             <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>
@@ -211,6 +271,9 @@ export default function MorningScreen() {
             </Text>
             <Text style={[s.qSub, { color: t.textSecondary }]}>This isn't positivity. It's pattern calibration. You can't see clearly from a deficit lens.</Text>
             <Input value={form.gratitude} onChangeText={set('gratitude')} placeholder="What's already working is…" multiline numberOfLines={3} focusColor="blue" />
+            {form.gratitude.length > 0 && (
+              <Text style={[s.wordCount, { color: t.textTertiary }]}>{gratitudeWordCount} {gratitudeWordCount === 1 ? 'word' : 'words'}</Text>
+            )}
             <View style={s.chips}>
               {CHIPS.gratitude.map(c => <Chip key={c} label={c} onPress={() => set('gratitude')(c)} />)}
             </View>
@@ -244,6 +307,10 @@ const s = StyleSheet.create({
   qSub:           { fontSize: 13, lineHeight: 20, marginBottom: 14 },
   qBlock:         { marginBottom: 32 },
   chips:          { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  wordCount:      { fontSize: 11, textAlign: 'right', marginTop: 4 },
+  yesterdayCard:  { borderRadius: 12, padding: 14, borderWidth: 1, borderLeftWidth: 3, marginBottom: 28 },
+  yesterdayLabel: { fontSize: 10, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 6 },
+  yesterdayText:  { fontSize: 14, lineHeight: 22, fontStyle: 'italic' },
   // Done / recap screen
   doneScroll:     { padding: 28, paddingTop: 60, paddingBottom: 60 },
   doneWrap:       { alignItems: 'center', marginBottom: 32 },

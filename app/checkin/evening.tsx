@@ -1,8 +1,10 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useFocusEffect } from '@react-navigation/native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as Haptics from 'expo-haptics'
 import { useTheme } from '../../src/ThemeContext'
 import { supabase } from '../../src/lib/supabase'
 import { useStore } from '../../src/lib/store'
@@ -61,11 +63,15 @@ type QProps = {
 
 function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips, onChipPress }: QProps) {
   const t = useTheme()
+  const wordCount = value.trim().split(/\s+/).filter(Boolean).length
   return (
     <View style={s.qBlock}>
       <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>{label}</Text>
       <Text style={[s.qSub, { color: t.textSecondary }]}>{sub}</Text>
       <Input value={value} onChangeText={onChangeText} placeholder={placeholder} multiline numberOfLines={3} focusColor="blue" />
+      {value.length > 0 && (
+        <Text style={[s.wordCount, { color: t.textTertiary }]}>{wordCount} {wordCount === 1 ? 'word' : 'words'}</Text>
+      )}
       {chips && onChipPress && (
         <View style={s.chips}>
           {chips.map(c => <Chip key={c} label={c} onPress={() => onChipPress(c)} />)}
@@ -85,6 +91,7 @@ export default function EveningScreen() {
   const [saving, setSaving] = useState(false)
   // Always start null (loading) — never show blank form until Supabase confirms no data
   const [saved, setSaved] = useState<boolean | null>(null)
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Re-runs every time the screen gains focus.
   useFocusEffect(useCallback(() => {
@@ -114,7 +121,17 @@ export default function EveningScreen() {
         })
         setSaved(true)
       } else {
-        setForm({ q1: '', q2: '', q3: '', q4: '', q5: '' })
+        // No Supabase data — check for a local draft
+        const draftKey = `igj_evening_draft_${today}`
+        const raw = await AsyncStorage.getItem(draftKey)
+        if (raw) {
+          try {
+            const draft = JSON.parse(raw) as Form
+            setForm(draft)
+          } catch {}
+        } else {
+          setForm({ q1: '', q2: '', q3: '', q4: '', q5: '' })
+        }
         setSaved(false)
       }
     }
@@ -122,7 +139,18 @@ export default function EveningScreen() {
   }, []))
 
   function set(k: keyof Form) {
-    return (v: string) => setForm(f => ({ ...f, [k]: v }))
+    return (v: string) => {
+      setForm(f => {
+        const next = { ...f, [k]: v }
+        // Debounce-save draft to AsyncStorage
+        if (debounceTimer.current) clearTimeout(debounceTimer.current)
+        debounceTimer.current = setTimeout(async () => {
+          const today = new Date().toISOString().split('T')[0]
+          await AsyncStorage.setItem(`igj_evening_draft_${today}`, JSON.stringify(next))
+        }, 1500)
+        return next
+      })
+    }
   }
 
   async function save() {
@@ -136,6 +164,9 @@ export default function EveningScreen() {
       })
     }
     markEveningDone()
+    // Clear the draft now that the real data is saved
+    await AsyncStorage.removeItem(`igj_evening_draft_${today}`)
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setSaving(false)
     setSaved(true)  // Show completion screen — user taps "Score the day" to continue
   }
@@ -284,6 +315,7 @@ const s = StyleSheet.create({
   qBlock:        { marginBottom: 32 },
   question:      { fontSize: 20, lineHeight: 28, marginBottom: 8 },
   qSub:          { fontSize: 13, lineHeight: 20, marginBottom: 14 },
+  wordCount:     { fontSize: 11, textAlign: 'right', marginTop: 4 },
   chips:         { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   // Done / recap screen
   doneScroll:    { padding: 28, paddingTop: 60, paddingBottom: 60 },
