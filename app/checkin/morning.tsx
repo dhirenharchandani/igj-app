@@ -54,17 +54,24 @@ function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips }: 
 export default function MorningScreen() {
   const router = useRouter()
   const t = useTheme()
-  const { markMorningDone } = useStore()
+  const { markMorningDone, getTodayStatus } = useStore()
   const [form, setForm] = useState<Form>({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
   const [saving, setSaving] = useState(false)
-  // null = checking, true = done today, false = not done
-  const [saved, setSaved] = useState<boolean | null>(null)
+  // Seed from store immediately so we never show a blank form when we already know it's done
+  const [saved, setSaved] = useState<boolean | null>(() => {
+    const s = getTodayStatus()
+    return s.morningDone ? null : false  // null triggers load; false skips spinner and shows form
+  })
   const [eveningTime, setEveningTime] = useState('')
 
   // useFocusEffect: re-runs every time the screen gains focus.
   // This means: coming back from another tab, AND the next morning (new date → no data found → fresh form).
   useFocusEffect(useCallback(() => {
-    setSaved(null) // Reset to "checking" state on every focus
+    const storeStatus = getTodayStatus()
+    // Only show spinner if store thinks it's done (need to load the actual responses)
+    // If store says not done, jump straight to the form (no spinner)
+    setSaved(storeStatus.morningDone ? null : false)
+
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setSaved(false); return }
@@ -97,7 +104,7 @@ export default function MorningScreen() {
       }
     }
     load()
-  }, []))
+  }, [getTodayStatus]))
 
   function set(k: keyof Form) {
     return (v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -131,8 +138,18 @@ export default function MorningScreen() {
     )
   }
 
-  // ── Already done today ──
+  // ── Already done today — show all responses ──
   if (saved) {
+    const RECAP = [
+      { label: "What's already working", value: form.gratitude, color: t.teal },
+      { label: 'Who I need to be today',           value: form.q1,       color: t.blue },
+      { label: 'The one thing that matters most',  value: form.q2,       color: t.blue },
+      { label: 'Energy level',                     value: form.q3,       color: t.amber },
+      { label: 'Pattern to watch for',             value: form.q4,       color: t.amber },
+      { label: 'Standard I\'m holding',            value: form.q5,       color: t.purple },
+      { label: 'What would make today a win',      value: form.q6,       color: t.teal },
+    ].filter(r => r.value)
+
     return (
       <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
         <ScrollView contentContainerStyle={s.doneScroll}>
@@ -148,25 +165,17 @@ export default function MorningScreen() {
             </Text>
           </View>
 
-          {/* Recap of their answers */}
-          {form.q1 ? (
-            <View style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.blue }]}>
-              <Text style={[s.recapLabel, { color: t.blue }]}>Who you said you'd be today</Text>
-              <Text style={[s.recapText, { color: t.textSecondary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>"{form.q1}"</Text>
+          {/* All responses */}
+          {RECAP.length > 0 ? RECAP.map(r => (
+            <View key={r.label} style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: r.color }]}>
+              <Text style={[s.recapLabel, { color: r.color }]}>{r.label}</Text>
+              <Text style={[s.recapText, { color: t.textPrimary }]}>{r.value}</Text>
             </View>
-          ) : null}
-          {form.q2 ? (
+          )) : (
             <View style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.teal }]}>
-              <Text style={[s.recapLabel, { color: t.teal }]}>The one thing that matters most</Text>
-              <Text style={[s.recapText, { color: t.textSecondary }]}>{form.q2}</Text>
+              <Text style={[s.recapText, { color: t.textSecondary }]}>Your responses are saved. Loading…</Text>
             </View>
-          ) : null}
-          {form.q6 ? (
-            <View style={[s.recapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.amber }]}>
-              <Text style={[s.recapLabel, { color: t.amber }]}>What would make today a win</Text>
-              <Text style={[s.recapText, { color: t.textSecondary }]}>{form.q6}</Text>
-            </View>
-          ) : null}
+          )}
 
           <View style={[s.reminderBox, { backgroundColor: t.bg3, borderColor: t.border }]}>
             <Text style={[s.reminderText, { color: t.textSecondary }]}>
