@@ -403,19 +403,19 @@ export default function DashboardScreen() {
           ].filter(t => t.show).map(tile => (
             <TouchableOpacity key={tile.href} onPress={() => router.push(tile.href as any)} activeOpacity={0.8}
               style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
-              <Text style={[s.tileText, { color: t.textSecondary }]}>{tile.label}</Text>
+              <Text style={[s.tileText, { color: t.textPrimary }]}>{tile.label}</Text>
             </TouchableOpacity>
           ))}
           {/* Weekly Reset — locked until 7 days in */}
           <TouchableOpacity
             onPress={() => state.weeklyUnlocked ? router.push('/weekly/data-bridge') : null}
             activeOpacity={state.weeklyUnlocked ? 0.8 : 1}
-            style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border, opacity: state.weeklyUnlocked ? 1 : 0.5 }]}>
-            <Text style={[s.tileText, { color: t.textSecondary }]}>
+            style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
+            <Text style={[s.tileText, { color: t.textPrimary }]}>
               {state.weeklyUnlocked ? '🔁 Weekly Reset' : `🔒 Weekly Reset`}
             </Text>
             {!state.weeklyUnlocked && (
-              <Text style={[s.tileSub, { color: t.textTertiary }]}>
+              <Text style={[s.tileSub, { color: t.textSecondary }]}>
                 {Math.max(0, 7 - state.totalDays)} day{Math.max(0, 7 - state.totalDays) !== 1 ? 's' : ''} to unlock
               </Text>
             )}
