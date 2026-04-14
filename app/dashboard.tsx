@@ -505,7 +505,6 @@ export default function DashboardScreen() {
         {/* Quick nav */}
         <View style={s.tiles}>
           {[
-            { label: '📖 Learn',        href: '/learn',               show: true,                    locked: false },
             { label: '🧠 Assessment',   href: '/assessment',          show: state.totalDays >= 3,    locked: false },
             { label: '📊 Patterns',     href: '/patterns',            show: state.totalDays >= 7,    locked: false },
           ].filter(t => t.show).map(tile => (
