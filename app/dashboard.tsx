@@ -60,9 +60,9 @@ function computeStreak(dates: string[]): { current: number; longest: number; tot
 }
 
 const PHASES = [
-  { label: 'Set the Field', icon: '☀️' },
-  { label: 'Harvest',       icon: '🌙' },
-  { label: 'Score',         icon: '📊' },
+  { label: 'Set the Field', sub: 'Morning',   icon: '☀️', step: 1 },
+  { label: 'Harvest',       sub: 'Evening',   icon: '🌙', step: 2 },
+  { label: 'Score',         sub: 'Scorecard', icon: '📊', step: 3 },
 ]
 
 export default function DashboardScreen() {
@@ -273,20 +273,27 @@ export default function DashboardScreen() {
     return name ? `Good ${timeWord}, ${name}` : `Good ${timeWord}`
   }, [profile.display_name])
 
-  // ── 7-day activity strip ──
+  // ── 7-day activity strip — always Mon → Sun of current week ──
   const activityDays = useMemo(() => {
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0]
+    // Rewind to this Monday (JS: 0=Sun, treat as 7 so Mon=start)
+    const jsDay = today.getDay()
+    const daysFromMon = jsDay === 0 ? 6 : jsDay - 1
+    const monday = new Date(today)
+    monday.setDate(today.getDate() - daysFromMon)
+    const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() - (6 - i))
+      const d = new Date(monday); d.setDate(monday.getDate() + i)
       const dateStr = d.toISOString().split('T')[0]
-      const entry = state.recentEntries.find(e => e.date === dateStr)
-      const today = new Date().toISOString().split('T')[0]
-      const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      const entry   = state.recentEntries.find(e => e.date === dateStr)
       return {
         dateStr,
-        label: DAY_LABELS[d.getDay()],
-        morningDone: entry?.morningDone ?? false,
-        eveningDone: entry?.eveningDone ?? false,
-        isToday: dateStr === today,
+        label:       DAY_LABELS[i],
+        morningDone: entry?.morningDone  ?? false,
+        eveningDone: entry?.eveningDone  ?? false,
+        isToday:     dateStr === todayStr,
+        isFuture:    dateStr  > todayStr,
       }
     })
   }, [state.recentEntries])
@@ -346,30 +353,50 @@ export default function DashboardScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.scroll}>
 
-        {/* Phase progress */}
+        {/* Phase progress — Mon→Sun step tracker */}
         <View style={s.phases}>
-          {PHASES.map((p, i) => (
-            <View key={p.label} style={[s.phaseBox, {
-              backgroundColor: phaseStatus[i] ? t.tealDim : hero.phase === i + 1 ? t.bg2 : t.bg3,
-              borderColor: phaseStatus[i] ? t.tealBorder : hero.phase === i + 1 ? t.border : t.border,
-              opacity: !phaseStatus[i] && hero.phase !== i + 1 && hero.phase !== 0 ? 0.65 : 1,
-            }]}>
-              <Text style={[s.phaseIcon, { color: phaseStatus[i] ? t.teal : undefined }]}>{phaseStatus[i] ? '✓' : p.icon}</Text>
-              <Text style={[s.phaseLabel, { color: phaseStatus[i] ? t.teal : hero.phase === i + 1 ? t.textPrimary : t.textSecondary }]}>{p.label}</Text>
-            </View>
-          ))}
+          {PHASES.map((p, i) => {
+            const done    = phaseStatus[i]
+            const active  = hero.phase === i + 1
+            const pending = !done && !active && hero.phase !== 0
+            return (
+              <React.Fragment key={p.label}>
+                <View style={[s.phaseBox, {
+                  backgroundColor: done ? t.tealDim : active ? t.bg2 : t.bg3,
+                  borderColor:     done ? t.tealBorder : active ? t.blue : t.border,
+                  borderWidth:     active ? 1.5 : 1,
+                }]}>
+                  <Text style={[s.phaseStep, { color: done ? t.teal : active ? t.blue : t.textSecondary }]}>{p.step}</Text>
+                  <Text style={[s.phaseIcon, { color: done ? t.teal : active ? t.blue : t.textSecondary, opacity: pending ? 0.5 : 1 }]}>
+                    {done ? '✓' : p.icon}
+                  </Text>
+                  <Text style={[s.phaseLabel, { color: done ? t.teal : active ? t.textPrimary : t.textSecondary, opacity: pending ? 0.6 : 1 }]}>{p.label}</Text>
+                  <Text style={[s.phaseSub,  { color: done ? t.teal : active ? t.blue : t.textTertiary,    opacity: pending ? 0.5 : 1 }]}>{p.sub}</Text>
+                </View>
+                {i < PHASES.length - 1 && (
+                  <Text style={[s.phaseArrow, { color: phaseStatus[i] ? t.teal : t.border }]}>›</Text>
+                )}
+              </React.Fragment>
+            )
+          })}
         </View>
 
-        {/* 7-day activity strip */}
+        {/* Mon→Sun activity strip */}
         <View style={[s.activityStrip, { backgroundColor: t.bg2, borderColor: t.border }]}>
           {activityDays.map(day => {
-            const bothDone = day.morningDone && day.eveningDone
-            const symbol = bothDone ? '✓' : day.morningDone ? '☀️' : day.eveningDone ? '🌙' : '·'
-            const symbolColor = bothDone ? t.teal : (day.morningDone || day.eveningDone) ? t.textSecondary : t.textTertiary
+            const bothDone   = day.morningDone && day.eveningDone
+            const symbol     = day.isFuture ? '·' : bothDone ? '✓' : day.morningDone ? '☀️' : day.eveningDone ? '🌙' : '·'
+            const symbolColor = day.isFuture
+              ? t.bg3
+              : bothDone ? t.teal
+              : day.morningDone ? t.blue
+              : day.eveningDone ? t.purple
+              : t.textTertiary
+            const labelColor = day.isToday ? t.teal : t.textSecondary
             return (
               <View key={day.dateStr} style={[s.activityCol, day.isToday && { backgroundColor: t.bg3, borderRadius: 8 }]}>
                 <Text style={[s.activitySymbol, { color: symbolColor, fontSize: bothDone ? 12 : (day.morningDone || day.eveningDone) ? 14 : 18 }]}>{symbol}</Text>
-                <Text style={[s.activityLabel, { color: day.isToday ? t.teal : t.textTertiary }]}>{day.label}</Text>
+                <Text style={[s.activityLabel, { color: labelColor, fontWeight: day.isToday ? '700' : '500' }]}>{day.label}</Text>
               </View>
             )
           })}
@@ -386,7 +413,7 @@ export default function DashboardScreen() {
         {/* Hero CTA */}
         <View style={[s.heroCard, { backgroundColor: t.bg2, borderLeftColor: hero.color }]}>
           {hero.phase > 0 && (
-            <Text style={[s.phaseNum, { color: t.textTertiary }]}>Phase {hero.phase} of 3</Text>
+            <Text style={[s.phaseNum, { color: hero.color }]}>Step {hero.phase} of 3</Text>
           )}
           <Text style={[s.heroTitle, { color: t.textPrimary }]}>{hero.heading}</Text>
           <Text style={[s.heroSub, { color: hero.btn ? t.textSecondary : t.textPrimary, marginBottom: hero.btn ? 18 : 0 }]}>{hero.sub}</Text>
@@ -418,16 +445,16 @@ export default function DashboardScreen() {
           ].map(stat => (
             <View key={stat.label} style={[s.statBox, { backgroundColor: t.bg3, borderColor: t.border }]}>
               <Text style={[s.statValue, { color: t.textPrimary }]}>{stat.value}</Text>
-              <Text style={[s.statLabel, { color: t.textTertiary }]}>{stat.label}</Text>
+              <Text style={[s.statLabel, { color: t.textSecondary }]}>{stat.label}</Text>
             </View>
           ))}
           <View style={[s.statBox, { backgroundColor: t.bg3, borderColor: t.border }]}>
             <Text style={[s.statValue, {
-              color: weekTrend === null ? t.textTertiary : weekTrend >= 0 ? t.teal : t.coral
+              color: weekTrend === null ? t.textSecondary : weekTrend >= 0 ? t.teal : t.coral
             }]}>
               {weekTrend === null ? '–' : weekTrend >= 0 ? `↑ +${weekTrend}` : `↓ ${weekTrend}`}
             </Text>
-            <Text style={[s.statLabel, { color: t.textTertiary }]}>vs last wk</Text>
+            <Text style={[s.statLabel, { color: t.textSecondary }]}>vs last wk</Text>
           </View>
         </View>
 
@@ -538,10 +565,13 @@ const s = StyleSheet.create({
   streakText:    { fontSize: 13, fontWeight: '600' },
   scroll:        { padding: 20, paddingBottom: 100 },
   phases:        { flexDirection: 'row', gap: 8, marginBottom: 20 },
-  phaseBox:      { flex: 1, padding: 12, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
-  phaseIcon:     { fontSize: 16, marginBottom: 4 },
-  phaseLabel:    { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', lineHeight: 13 },
-  phaseNum:      { fontSize: 10, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 8 },
+  phaseBox:      { flex: 1, padding: 10, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
+  phaseStep:     { fontSize: 9, fontWeight: '700', marginBottom: 4, opacity: 0.7 },
+  phaseIcon:     { fontSize: 15, marginBottom: 3 },
+  phaseLabel:    { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', lineHeight: 12 },
+  phaseSub:      { fontSize: 8, textAlign: 'center', marginTop: 2, letterSpacing: 0.3 },
+  phaseArrow:    { fontSize: 18, alignSelf: 'center', paddingBottom: 4, marginHorizontal: -2 },
+  phaseNum:      { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 6 },
   heroCard:      { borderRadius: 16, padding: 20, borderLeftWidth: 3, marginBottom: 20 },
   heroTitle:     { fontSize: 20, fontWeight: '600', marginBottom: 6, lineHeight: 27 },
   heroSub:       { fontSize: 14, lineHeight: 21 },
@@ -576,7 +606,7 @@ const s = StyleSheet.create({
   activityStrip: { flexDirection: 'row', justifyContent: 'space-between', borderRadius: 14, borderWidth: 1, padding: 12, marginBottom: 14 },
   activityCol:   { flex: 1, alignItems: 'center', paddingVertical: 6, paddingHorizontal: 2 },
   activitySymbol:{ marginBottom: 4, textAlign: 'center' },
-  activityLabel: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  activityLabel: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5 },
   gapCard:       { borderRadius: 14, padding: 16, borderLeftWidth: 3, marginBottom: 16 },
   gapLabel:      { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 8 },
   gapText:       { fontSize: 15, lineHeight: 24, fontStyle: 'italic', fontFamily: 'DMSerifDisplay_400Regular_Italic' },
