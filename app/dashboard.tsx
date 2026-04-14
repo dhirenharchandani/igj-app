@@ -188,9 +188,9 @@ export default function DashboardScreen() {
         todayScore: todayScoreVal, recentEntries, recentScorecards: (recentScorecards ?? []) as ScorecardRow[],
         insightText: insight?.insight_text ?? '',
         milestoneShown: showMilestone,
-        morningDone: !!morning || storeStatus.morningDone,
-        eveningDone: !!evening || storeStatus.eveningDone,
-        scorecardDone: !!scorecard || storeStatus.scorecardDone,
+        morningDone: !!morning,
+        eveningDone: !!evening,
+        scorecardDone: !!scorecard,
         weeklyResetDone: !!weeklyReset,
         loading: false,
       }))
@@ -256,8 +256,8 @@ export default function DashboardScreen() {
       sub: state.todayScore
         ? `You scored ${state.todayScore}/5 today. ${state.streak} day streak.`
         : `${state.streak} day streak. Keep going.`,
-      btn: state.insightText ? "Read today's insight →" : undefined,
-      href: '/patterns', color: t.teal, locked: false,
+      btn: undefined,
+      href: '', color: t.teal, locked: false,
     }
   }
 
@@ -366,12 +366,12 @@ export default function DashboardScreen() {
                   borderColor:     done ? t.tealBorder : active ? t.blue : t.border,
                   borderWidth:     active ? 1.5 : 1,
                 }]}>
-                  <Text style={[s.phaseStep, { color: done ? t.teal : active ? t.blue : t.textSecondary }]}>{p.step}</Text>
-                  <Text style={[s.phaseIcon, { color: done ? t.teal : active ? t.blue : t.textSecondary, opacity: pending ? 0.5 : 1 }]}>
+                  <Text style={[s.phaseStep, { color: done ? t.teal : active ? t.blue : t.textSecondary }]}>STEP {p.step}</Text>
+                  <Text style={[s.phaseIcon, { color: done ? t.teal : active ? t.blue : t.textSecondary, opacity: pending ? 0.8 : 1 }]}>
                     {done ? '✓' : p.icon}
                   </Text>
-                  <Text style={[s.phaseLabel, { color: done ? t.teal : active ? t.textPrimary : t.textSecondary, opacity: pending ? 0.6 : 1 }]}>{p.label}</Text>
-                  <Text style={[s.phaseSub,  { color: done ? t.teal : active ? t.blue : t.textTertiary,    opacity: pending ? 0.5 : 1 }]}>{p.sub}</Text>
+                  <Text style={[s.phaseLabel, { color: done ? t.teal : active ? t.textPrimary : t.textSecondary, opacity: pending ? 0.9 : 1 }]}>{p.label}</Text>
+                  <Text style={[s.phaseSub,  { color: done ? t.teal : active ? t.blue : t.textTertiary,    opacity: pending ? 0.8 : 1 }]}>{p.sub}</Text>
                 </View>
                 {i < PHASES.length - 1 && (
                   <Text style={[s.phaseArrow, { color: phaseStatus[i] ? t.teal : t.border }]}>›</Text>
@@ -481,11 +481,11 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Today's insight */}
+        {/* Today's insight — shown below hero, full brightness */}
         {state.insightText ? (
           <View style={[s.insightCard, { backgroundColor: t.bg2, borderLeftColor: t.purple }]}>
-            <Text style={[s.insightLabel, { color: t.purple }]}>Today&apos;s pattern insight</Text>
-            <Text style={[s.insightText, { color: t.textSecondary }]}>{state.insightText}</Text>
+            <Text style={[s.insightLabel, { color: t.purple }]}>📊 Today's pattern insight</Text>
+            <Text style={[s.insightText, { color: t.textPrimary }]}>{state.insightText}</Text>
           </View>
         ) : null}
 
@@ -566,7 +566,7 @@ const s = StyleSheet.create({
   scroll:        { padding: 20, paddingBottom: 100 },
   phases:        { flexDirection: 'row', gap: 8, marginBottom: 20 },
   phaseBox:      { flex: 1, padding: 10, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
-  phaseStep:     { fontSize: 9, fontWeight: '700', marginBottom: 4, opacity: 0.7 },
+  phaseStep:     { fontSize: 7, fontWeight: '700', marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.8 },
   phaseIcon:     { fontSize: 15, marginBottom: 3 },
   phaseLabel:    { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', lineHeight: 12 },
   phaseSub:      { fontSize: 8, textAlign: 'center', marginTop: 2, letterSpacing: 0.3 },
@@ -601,8 +601,8 @@ const s = StyleSheet.create({
   ghostBtnText:  { fontSize: 13 },
   tiles:         { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
   tile:          { borderRadius: 14, padding: 14, paddingHorizontal: 16, borderWidth: 1 },
-  tileText:      { fontSize: 13, fontWeight: '500' },
-  tileSub:       { fontSize: 10, marginTop: 3 },
+  tileText:      { fontSize: 13, fontWeight: '500', textAlign: 'center' },
+  tileSub:       { fontSize: 10, marginTop: 3, textAlign: 'center' },
   activityStrip: { flexDirection: 'row', justifyContent: 'space-between', borderRadius: 14, borderWidth: 1, padding: 12, marginBottom: 14 },
   activityCol:   { flex: 1, alignItems: 'center', paddingVertical: 6, paddingHorizontal: 2 },
   activitySymbol:{ marginBottom: 4, textAlign: 'center' },
