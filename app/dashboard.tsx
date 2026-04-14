@@ -502,24 +502,45 @@ export default function DashboardScreen() {
           </Card>
         ) : null}
 
-        {/* Quick nav */}
+        {/* Quick nav — always visible, locked until threshold */}
         <View style={s.tiles}>
-          {[
-            { label: '🧠 Assessment',   href: '/assessment',          show: state.totalDays >= 3,    locked: false },
-            { label: '📊 Patterns',     href: '/patterns',            show: state.totalDays >= 7,    locked: false },
-          ].filter(t => t.show).map(tile => (
-            <TouchableOpacity key={tile.href} onPress={() => router.push(tile.href as any)} activeOpacity={0.8}
-              style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
-              <Text style={[s.tileText, { color: t.textPrimary }]}>{tile.label}</Text>
-            </TouchableOpacity>
-          ))}
-          {/* Weekly Reset — locked until 7 days in */}
+          {/* Assessment — unlocks at 3 days */}
+          <TouchableOpacity
+            onPress={() => state.totalDays >= 3 ? router.push('/assessment' as any) : null}
+            activeOpacity={state.totalDays >= 3 ? 0.8 : 1}
+            style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
+            <Text style={[s.tileText, { color: t.textPrimary }]}>
+              {state.totalDays >= 3 ? '🧠 Assessment' : '🔒 Assessment'}
+            </Text>
+            {state.totalDays < 3 && (
+              <Text style={[s.tileSub, { color: t.textSecondary }]}>
+                {Math.max(0, 3 - state.totalDays)} day{Math.max(0, 3 - state.totalDays) !== 1 ? 's' : ''} to unlock
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Patterns — unlocks at 7 days */}
+          <TouchableOpacity
+            onPress={() => state.totalDays >= 7 ? router.push('/patterns' as any) : null}
+            activeOpacity={state.totalDays >= 7 ? 0.8 : 1}
+            style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
+            <Text style={[s.tileText, { color: t.textPrimary }]}>
+              {state.totalDays >= 7 ? '📊 Patterns' : '🔒 Patterns'}
+            </Text>
+            {state.totalDays < 7 && (
+              <Text style={[s.tileSub, { color: t.textSecondary }]}>
+                {Math.max(0, 7 - state.totalDays)} day{Math.max(0, 7 - state.totalDays) !== 1 ? 's' : ''} to unlock
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Weekly Reset — unlocks at 7 days */}
           <TouchableOpacity
             onPress={() => state.weeklyUnlocked ? router.push('/weekly/data-bridge') : null}
             activeOpacity={state.weeklyUnlocked ? 0.8 : 1}
             style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
             <Text style={[s.tileText, { color: t.textPrimary }]}>
-              {state.weeklyUnlocked ? '🔁 Weekly Reset' : `🔒 Weekly Reset`}
+              {state.weeklyUnlocked ? '🔁 Weekly Reset' : '🔒 Weekly Reset'}
             </Text>
             {!state.weeklyUnlocked && (
               <Text style={[s.tileSub, { color: t.textSecondary }]}>
