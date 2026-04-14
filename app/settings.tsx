@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Switch } from 'react-native'
+import React, { useEffect, useState, useCallback } from 'react'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Switch, KeyboardAvoidingView } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import { useRouter } from 'expo-router'
+import { useFocusEffect } from '@react-navigation/native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Notifications from 'expo-notifications'
 import { useTheme } from '../src/ThemeContext'
@@ -33,10 +34,10 @@ export default function SettingsScreen() {
   // Your Mission
   const [identityGapText, setIdentityGapText] = useState('')
 
-  // Account
-  const [displayName, setDisplayName] = useState('')
+  // Account — seed from store so name shows immediately (store is updated on every save)
+  const [displayName, setDisplayName] = useState(profile.display_name || '')
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -65,7 +66,7 @@ export default function SettingsScreen() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, []))
 
   function fmtTime(d: Date) {
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -143,7 +144,8 @@ export default function SettingsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={s.scroll}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
 
         {/* Check-in Schedule */}
         <Text style={[s.sectionTitle, { color: t.textPrimary }]}>Check-in Schedule</Text>
@@ -204,8 +206,8 @@ export default function SettingsScreen() {
               </View>
             )}
 
-            <Text style={[s.hint, { color: t.textTertiary }]}>
-              The evening button on your dashboard activates at your scheduled time.
+            <Text style={[s.hint, { color: t.textSecondary }]}>
+              The evening check-in button on your dashboard becomes active at your scheduled time.
             </Text>
 
             {/* Push notification toggle — native only */}
@@ -213,7 +215,7 @@ export default function SettingsScreen() {
               <View style={[s.row, { backgroundColor: t.bg2, borderColor: t.border, marginBottom: 20 }]}>
                 <View style={{ flex: 1, marginRight: 12 }}>
                   <Text style={[s.rowLabel, { color: t.textPrimary }]}>Reminders</Text>
-                  <Text style={[s.rowSub, { color: t.textTertiary }]}>Daily push notifications at your check-in times</Text>
+                  <Text style={[s.rowSub, { color: t.textSecondary }]}>Daily reminders at your morning and evening check-in times</Text>
                 </View>
                 <Switch
                   value={notifEnabled}
@@ -251,7 +253,7 @@ export default function SettingsScreen() {
         <View style={[s.row, { backgroundColor: t.bg2, borderColor: t.border, marginBottom: 32 }]}>
           <View>
             <Text style={[s.rowLabel, { color: t.textPrimary }]}>{isDark ? 'Dark mode' : 'Light mode'}</Text>
-            <Text style={[s.rowSub, { color: t.textTertiary }]}>{isDark ? 'Switch to light' : 'Switch to dark'}</Text>
+            <Text style={[s.rowSub, { color: t.textSecondary }]}>{isDark ? 'Switch to light' : 'Switch to dark'}</Text>
           </View>
           <TouchableOpacity
             onPress={() => setTheme(isDark ? 'light' : 'dark')}
@@ -279,6 +281,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <BottomNav />
     </SafeAreaView>

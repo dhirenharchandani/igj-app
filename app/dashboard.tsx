@@ -270,7 +270,7 @@ export default function DashboardScreen() {
     const hour = new Date().getHours()
     const timeWord = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
     const name = profile.display_name?.trim()
-    return name ? `Good ${timeWord}, ${name}` : `Good ${timeWord}`
+    return name ? `Great ${timeWord}, ${name}` : `Great ${timeWord}`
   }, [profile.display_name])
 
   // ── 7-day activity strip — always Mon → Sun of current week ──
