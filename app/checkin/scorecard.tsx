@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native'
+import React, { useState, useCallback } from 'react'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../../src/ThemeContext'
 import { supabase } from '../../src/lib/supabase'
 import { useStore } from '../../src/lib/store'
@@ -27,6 +28,36 @@ export default function ScorecardScreen() {
   const [insight, setInsight] = useState('')
   const [lowestDim, setLowestDim] = useState('')
   const [saved, setSaved] = useState(false)
+  const [morningIntention, setMorningIntention] = useState('')
+  const [loadingData, setLoadingData] = useState(false)
+
+  useFocusEffect(useCallback(() => {
+    async function loadMorning() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { return }
+        const today = new Date().toISOString().split('T')[0]
+        const timeout = new Promise<{ data: null }>((resolve) =>
+          setTimeout(() => resolve({ data: null }), 6000)
+        )
+        const { data } = await Promise.race([
+          supabase
+            .from('morning_checkins')
+            .select('q1_intention')
+            .eq('user_id', user.id)
+            .eq('date', today)
+            .maybeSingle(),
+          timeout,
+        ])
+        setMorningIntention(data?.q1_intention ?? '')
+      } catch {
+        // ignore — morningIntention stays empty, not a blocking error
+      } finally {
+        setLoadingData(false)
+      }
+    }
+    loadMorning()
+  }, []))
 
   const total    = Object.values(scores).reduce((a, b) => a + b, 0)
   const allRated = Object.values(scores).every(v => v > 0)
@@ -68,6 +99,16 @@ export default function ScorecardScreen() {
     setSaved(true)
   }
 
+  if (loadingData) {
+    return (
+      <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={t.blue} />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       <View style={[s.tabBar, { backgroundColor: t.bg2, borderBottomColor: t.border }]}>
@@ -88,6 +129,14 @@ export default function ScorecardScreen() {
           <>
             <Text style={[s.title, { color: t.textPrimary }]}>Daily scorecard</Text>
             <Text style={[s.sub, { color: t.textSecondary }]}>Rate each dimension honestly. This feeds your pattern data.</Text>
+
+            {!!morningIntention && (
+              <View style={[s.intentionMirror, { backgroundColor: t.bg3, borderColor: t.border, borderLeftColor: t.blue }]}>
+                <Text style={[s.intentionLabel, { color: t.blue }]}>THIS MORNING YOU SAID</Text>
+                <Text style={[s.intentionText, { color: t.textPrimary }]}>"{morningIntention}"</Text>
+                <Text style={[s.intentionCta, { color: t.textSecondary }]}>Score the day through that lens.</Text>
+              </View>
+            )}
 
             {DAILY_DIMENSIONS.map(dim => (
               <View key={dim.key} style={s.dimBlock}>
@@ -159,4 +208,8 @@ const s = StyleSheet.create({
   insightText: { fontSize: 15, lineHeight: 26 },
   focusArea:   { borderRadius: 10, padding: 12, borderWidth: 1, marginBottom: 24 },
   focusText:   { fontSize: 12 },
+  intentionMirror: { borderRadius: 14, padding: 16, borderWidth: 1, borderLeftWidth: 3, marginBottom: 28 },
+  intentionLabel:  { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 6 },
+  intentionText:   { fontSize: 15, lineHeight: 24, fontStyle: 'italic', marginBottom: 6 },
+  intentionCta:    { fontSize: 12 },
 })

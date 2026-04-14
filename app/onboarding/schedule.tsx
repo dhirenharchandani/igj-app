@@ -21,19 +21,23 @@ export default function ScheduleScreen() {
   const t      = useTheme()
   const [morningTime, setMorningTime] = useState('07:00')
   const [eveningTime, setEveningTime] = useState('21:00')
-  const [saving, setSaving] = useState(false)
+  const [saving] = useState(false)
 
   async function save() {
-    setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await supabase.from('user_profiles').upsert({
-        id: user.id, morning_time: morningTime + ':00',
-        evening_time: eveningTime + ':00', onboarding_done: true,
-      })
+    // Navigate immediately — don't block on network
+    router.replace('/assessment')
+    // Fire-and-forget save in background
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        supabase.from('user_profiles').upsert({
+          id: user.id, morning_time: morningTime + ':00',
+          evening_time: eveningTime + ':00', onboarding_done: true,
+        }).then(() => {}).catch(() => {})
+      }
+    } catch {
+      // silently ignore — onboarding_done will be set on next save
     }
-    setSaving(false)
-    router.replace('/dashboard')
   }
 
   return (

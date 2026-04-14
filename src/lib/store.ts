@@ -8,6 +8,9 @@ export interface UserProfile {
   display_name: string
   timezone: string
   theme: Theme
+  morning_time: string   // HH:MM:SS
+  evening_time: string   // HH:MM:SS
+  identity_gap_text: string
 }
 
 export interface AssessmentScores {
@@ -42,6 +45,7 @@ interface Store {
   profile: UserProfile
   setTheme: (theme: Theme) => void
   updateProfile: (data: Partial<UserProfile>) => void
+  markAssessmentDone: () => void
   // Today's check-in status — updated immediately on save, no async
   todayStatus: TodayStatus
   markMorningDone: () => void
@@ -67,11 +71,16 @@ export const useStore = create<Store>()(
         display_name: '',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         theme: 'dark',
+        morning_time: '07:00:00',
+        evening_time: '21:00:00',
+        identity_gap_text: '',
       },
       setTheme: (theme) =>
         set((s) => ({ profile: { ...s.profile, theme } })),
       updateProfile: (data) =>
         set((s) => ({ profile: { ...s.profile, ...data } })),
+      markAssessmentDone: () =>
+        set((s) => ({ onboarding: { ...s.onboarding, assessment_completed: true } })),
 
       todayStatus: { date: '', morningDone: false, eveningDone: false, scorecardDone: false },
 
@@ -85,15 +94,30 @@ export const useStore = create<Store>()(
 
       markMorningDone: () => {
         const today = new Date().toISOString().split('T')[0]
-        set((s) => ({ todayStatus: { ...s.todayStatus, date: today, morningDone: true } }))
+        set((s) => {
+          const base = s.todayStatus.date === today
+            ? s.todayStatus
+            : { date: today, morningDone: false, eveningDone: false, scorecardDone: false }
+          return { todayStatus: { ...base, morningDone: true } }
+        })
       },
       markEveningDone: () => {
         const today = new Date().toISOString().split('T')[0]
-        set((s) => ({ todayStatus: { ...s.todayStatus, date: today, eveningDone: true } }))
+        set((s) => {
+          const base = s.todayStatus.date === today
+            ? s.todayStatus
+            : { date: today, morningDone: false, eveningDone: false, scorecardDone: false }
+          return { todayStatus: { ...base, eveningDone: true } }
+        })
       },
       markScorecardDone: () => {
         const today = new Date().toISOString().split('T')[0]
-        set((s) => ({ todayStatus: { ...s.todayStatus, date: today, scorecardDone: true } }))
+        set((s) => {
+          const base = s.todayStatus.date === today
+            ? s.todayStatus
+            : { date: today, morningDone: false, eveningDone: false, scorecardDone: false }
+          return { todayStatus: { ...base, scorecardDone: true } }
+        })
       },
     }),
     {

@@ -89,49 +89,61 @@ export default function EveningScreen() {
   const [morningDone, setMorningDone] = useState(false)
   const [form, setForm] = useState<Form>({ q1: '', q2: '', q3: '', q4: '', q5: '' })
   const [saving, setSaving] = useState(false)
-  // Always start null (loading) — never show blank form until Supabase confirms no data
-  const [saved, setSaved] = useState<boolean | null>(null)
+  // Start false — render form immediately, background load updates to true if already done
+  const [saved, setSaved] = useState<boolean | null>(false)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [quickMode, setQuickMode] = useState(false)
 
   // Re-runs every time the screen gains focus.
   useFocusEffect(useCallback(() => {
-    setSaved(null) // show spinner while we check
-
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setSaved(false); return }
-      const today = new Date().toISOString().split('T')[0]
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { setSaved(false); return }
+        const today = new Date().toISOString().split('T')[0]
 
-      // Load morning intention (maybeSingle avoids error when no row)
-      const { data: morning } = await supabase.from('morning_checkins')
-        .select('q1_intention').eq('user_id', user.id).eq('date', today).maybeSingle()
-      if (morning?.q1_intention) { setMorningIntention(morning.q1_intention); setMorningDone(true) }
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 6000)
+        )
+        const [{ data: morning }, { data: evening }] = await Promise.race([
+          Promise.all([
+            // Load morning intention (maybeSingle avoids error when no row)
+            supabase.from('morning_checkins')
+              .select('q1_intention').eq('user_id', user.id).eq('date', today).maybeSingle(),
+            // Check if evening is already done today
+            supabase.from('evening_checkins')
+              .select('q1_delivered,q2_pattern,q3_gap,q4_learning,q5_tomorrow')
+              .eq('user_id', user.id).eq('date', today).maybeSingle(),
+          ]),
+          timeout,
+        ])
 
-      // Check if evening is already done today
-      const { data: evening } = await supabase.from('evening_checkins')
-        .select('q1_delivered,q2_pattern,q3_gap,q4_learning,q5_tomorrow')
-        .eq('user_id', user.id).eq('date', today).maybeSingle()
-      if (evening) {
-        setForm({
-          q1: evening.q1_delivered ?? '',
-          q2: evening.q2_pattern ?? '',
-          q3: evening.q3_gap ?? '',
-          q4: evening.q4_learning ?? '',
-          q5: evening.q5_tomorrow ?? '',
-        })
-        setSaved(true)
-      } else {
-        // No Supabase data — check for a local draft
-        const draftKey = `igj_evening_draft_${today}`
-        const raw = await AsyncStorage.getItem(draftKey)
-        if (raw) {
-          try {
-            const draft = JSON.parse(raw) as Form
-            setForm(draft)
-          } catch {}
+        if (morning?.q1_intention) { setMorningIntention(morning.q1_intention); setMorningDone(true) }
+
+        if (evening) {
+          setForm({
+            q1: evening.q1_delivered ?? '',
+            q2: evening.q2_pattern ?? '',
+            q3: evening.q3_gap ?? '',
+            q4: evening.q4_learning ?? '',
+            q5: evening.q5_tomorrow ?? '',
+          })
+          setSaved(true)
         } else {
-          setForm({ q1: '', q2: '', q3: '', q4: '', q5: '' })
+          // No Supabase data — check for a local draft
+          const draftKey = `igj_evening_draft_${today}`
+          const raw = await AsyncStorage.getItem(draftKey)
+          if (raw) {
+            try {
+              const draft = JSON.parse(raw) as Form
+              setForm(draft)
+            } catch {}
+          } else {
+            setForm({ q1: '', q2: '', q3: '', q4: '', q5: '' })
+          }
+          setSaved(false)
         }
+      } catch {
         setSaved(false)
       }
     }
@@ -256,6 +268,24 @@ export default function EveningScreen() {
             </View>
           )}
 
+          {/* Quick mode toggle */}
+          {!quickMode && (
+            <TouchableOpacity onPress={() => setQuickMode(true)} activeOpacity={0.7} style={sq.quickToggle}>
+              <Text style={[sq.quickToggleText, { color: t.textTertiary }]}>Pressed for time? → Quick check-in (1 question)</Text>
+            </TouchableOpacity>
+          )}
+          {quickMode && (
+            <View style={[sq.quickBanner, { backgroundColor: t.bg3, borderColor: t.border }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={[sq.quickBannerLabel, { color: t.textSecondary }]}>Quick check-in</Text>
+                <TouchableOpacity onPress={() => setQuickMode(false)}>
+                  <Text style={{ color: t.textTertiary, fontSize: 12 }}>Full version →</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={[sq.quickBannerSub, { color: t.textTertiary }]}>One honest answer closes the loop.</Text>
+            </View>
+          )}
+
           <QuestionBlock
             label="Did I show up as the person I said I'd be this morning?"
             sub="Not pass or fail. Just honest."
@@ -263,36 +293,44 @@ export default function EveningScreen() {
             placeholder="I showed up as… / I didn't show up as…"
             chips={CHIPS.q1} onChipPress={set('q1')}
           />
-          <QuestionBlock
-            label="What pattern showed up today that I didn't want?"
-            sub="Name the pattern, not just the event."
-            value={form.q2} onChangeText={set('q2')}
-            placeholder="The pattern that showed up was…"
-            chips={CHIPS.q2} onChipPress={set('q2')}
-          />
-          <QuestionBlock
-            label="Where was the gap between my intention and my execution?"
-            sub="Be specific. 'Everywhere' isn't an answer."
-            value={form.q3} onChangeText={set('q3')}
-            placeholder="The gap lived in…"
-            chips={CHIPS.q3} onChipPress={set('q3')}
-          />
-          <QuestionBlock
-            label="What's the one thing I'm taking from today?"
-            sub="One thing. Distill it."
-            value={form.q4} onChangeText={set('q4')}
-            placeholder="Today taught me…"
-            chips={CHIPS.q4} onChipPress={set('q4')}
-          />
-          <QuestionBlock
-            label="What needs to shift tomorrow?"
-            sub="Not a to-do list. What actually needs to change."
-            value={form.q5} onChangeText={set('q5')}
-            placeholder="Tomorrow I need to shift…"
-            chips={CHIPS.q5} onChipPress={set('q5')}
-          />
+          {!quickMode && (
+            <QuestionBlock
+              label="What pattern showed up today that I didn't want?"
+              sub="Name the pattern, not just the event."
+              value={form.q2} onChangeText={set('q2')}
+              placeholder="The pattern that showed up was…"
+              chips={CHIPS.q2} onChipPress={set('q2')}
+            />
+          )}
+          {!quickMode && (
+            <QuestionBlock
+              label="Where was the gap between my intention and my execution?"
+              sub="Be specific. 'Everywhere' isn't an answer."
+              value={form.q3} onChangeText={set('q3')}
+              placeholder="The gap lived in…"
+              chips={CHIPS.q3} onChipPress={set('q3')}
+            />
+          )}
+          {!quickMode && (
+            <QuestionBlock
+              label="What's the one thing I'm taking from today?"
+              sub="One thing. Distill it."
+              value={form.q4} onChangeText={set('q4')}
+              placeholder="Today taught me…"
+              chips={CHIPS.q4} onChipPress={set('q4')}
+            />
+          )}
+          {!quickMode && (
+            <QuestionBlock
+              label="What needs to shift tomorrow?"
+              sub="Not a to-do list. What actually needs to change."
+              value={form.q5} onChangeText={set('q5')}
+              placeholder="Tomorrow I need to shift…"
+              chips={CHIPS.q5} onChipPress={set('q5')}
+            />
+          )}
 
-          <Btn label={saving ? 'Saving…' : 'Complete evening →'} onPress={save} variant="blue" loading={saving} />
+          <Btn label={saving ? 'Saving…' : (quickMode ? 'Close the loop →' : 'Complete evening →')} onPress={save} variant="blue" loading={saving} />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -327,4 +365,12 @@ const s = StyleSheet.create({
   recapCard:     { borderRadius: 16, padding: 18, borderWidth: 1, borderLeftWidth: 3, marginBottom: 12 },
   recapLabel:    { fontSize: 10, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
   recapText:     { fontSize: 15, lineHeight: 24 },
+})
+
+const sq = StyleSheet.create({
+  quickToggle:     { alignSelf: 'flex-start', marginBottom: 20, paddingVertical: 4 },
+  quickToggleText: { fontSize: 12 },
+  quickBanner:     { borderRadius: 12, padding: 14, borderWidth: 1, marginBottom: 20 },
+  quickBannerLabel:{ fontSize: 13, fontWeight: '600' },
+  quickBannerSub:  { fontSize: 12 },
 })

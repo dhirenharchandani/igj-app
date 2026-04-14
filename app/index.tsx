@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { View, Text, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
 import { useTheme } from '../src/ThemeContext'
 import { supabase } from '../src/lib/supabase'
 import { Btn } from '../src/components/ui/Btn'
@@ -8,7 +9,8 @@ import { Input } from '../src/components/ui/Input'
 import { Card } from '../src/components/ui/Card'
 
 export default function LandingScreen() {
-  const t = useTheme()
+  const t      = useTheme()
+  const router = useRouter()
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode]         = useState<'signin' | 'signup'>('signin')
@@ -19,14 +21,30 @@ export default function LandingScreen() {
     setError('')
     if (!email.trim() || !password.trim()) return
     setLoading(true)
-    if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email: email.trim(), password })
-      if (error) setError(error.message)
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
-      if (error) setError(error.message)
+    try {
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Connection timed out. Check your internet and try again.')), 10000)
+      )
+      if (mode === 'signup') {
+        const { error } = await Promise.race([
+          supabase.auth.signUp({ email: email.trim(), password }),
+          timeout,
+        ]) as { error: any }
+        if (error) throw error
+        router.replace('/onboarding/identity')
+      } else {
+        const { error } = await Promise.race([
+          supabase.auth.signInWithPassword({ email: email.trim(), password }),
+          timeout,
+        ]) as { error: any }
+        if (error) throw error
+        router.replace('/dashboard')
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (

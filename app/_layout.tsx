@@ -1,8 +1,7 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import * as Linking from 'expo-linking'
 import { useFonts, DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans'
 import { DMSerifDisplay_400Regular, DMSerifDisplay_400Regular_Italic } from '@expo-google-fonts/dm-serif-display'
 import { ThemeProvider } from '../src/ThemeContext'
@@ -13,42 +12,33 @@ import { useRouter } from 'expo-router'
 function RootNavigator() {
   const router = useRouter()
   const mode   = useStore(s => s.profile.theme)
+  const didRestoreSession = useRef(false)
 
   useEffect(() => {
-    // Handle magic-link deep link
-    const handleUrl = async (url: string) => {
-      const fragment = url.split('#')[1] ?? url.split('?')[1] ?? ''
-      const params = new URLSearchParams(fragment)
-      const access_token  = params.get('access_token')
-      const refresh_token = params.get('refresh_token')
-      if (access_token && refresh_token) {
-        await supabase.auth.setSession({ access_token, refresh_token })
-      }
-    }
-
-    Linking.getInitialURL().then(url => { if (url) handleUrl(url) })
-    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url))
-
-    // Auth state
+    // Only handle INITIAL_SESSION (returning user opens app with existing session)
+    // Active sign-in navigation is handled directly in index.tsx
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        const { data: profile } = await supabase
-          .from('user_profiles').select('onboarding_done').eq('id', session.user.id).single()
-        if (profile?.onboarding_done) {
-          router.replace('/dashboard')
-        } else {
-          router.replace('/onboarding/identity')
+      if (event === 'INITIAL_SESSION') {
+        if (session && !didRestoreSession.current) {
+          didRestoreSession.current = true
+          // Returning user — route based on onboarding status
+          try {
+            const { data: profile } = await supabase
+              .from('user_profiles').select('onboarding_done').eq('id', session.user.id).maybeSingle()
+            router.replace(profile?.onboarding_done ? '/dashboard' : '/onboarding/identity')
+          } catch {
+            router.replace('/dashboard')
+          }
         }
+        // No session on INITIAL_SESSION = not logged in, stay on index
       }
       if (event === 'SIGNED_OUT') {
+        didRestoreSession.current = false
         router.replace('/')
       }
     })
 
-    return () => {
-      sub.remove()
-      subscription.unsubscribe()
-    }
+    return () => subscription.unsubscribe()
   }, [])
 
   return (

@@ -67,65 +67,79 @@ export default function MorningScreen() {
   const { markMorningDone } = useStore()
   const [form, setForm] = useState<Form>({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
   const [saving, setSaving] = useState(false)
-  // Always start null (loading) — never show the blank form until we've checked Supabase
-  const [saved, setSaved] = useState<boolean | null>(null)
+  // Start false — render form immediately, background load updates to true if already done
+  const [saved, setSaved] = useState<boolean | null>(false)
   const [eveningTime, setEveningTime] = useState('')
   const [yesterdayWin, setYesterdayWin] = useState('')
+  const [yesterdayMissed, setYesterdayMissed]   = useState(false)
+  const [recoveryNote, setRecoveryNote]         = useState('')
+  const [recoverySaved, setRecoverySaved]       = useState(false)
+  const [quickMode, setQuickMode]               = useState(false)
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Re-runs every time the screen gains focus.
   // Always checks Supabase first — so on a new day, no data is found → fresh form automatically.
   useFocusEffect(useCallback(() => {
-    setSaved(null) // show spinner while we check
-
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setSaved(false); return }
-      const today = new Date().toISOString().split('T')[0]
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
-      const [{ data }, { data: profile }, { data: winData }] = await Promise.all([
-        supabase.from('morning_checkins')
-          .select('gratitude_entry,q1_intention,q2_focus,q3_energy,q4_pattern,q5_standard,q6_win')
-          .eq('user_id', user.id).eq('date', today).maybeSingle(),
-        supabase.from('user_profiles').select('evening_time').eq('id', user.id).maybeSingle(),
-        supabase.from('morning_checkins').select('q6_win').eq('user_id', user.id).eq('date', yesterday).maybeSingle(),
-      ])
-      if (profile?.evening_time) {
-        const [h, m] = (profile.evening_time as string).split(':').map(Number)
-        const fmt = new Date(); fmt.setHours(h, m, 0)
-        setEveningTime(fmt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))
-      }
-      if (winData?.q6_win) {
-        setYesterdayWin(winData.q6_win)
-      } else {
-        setYesterdayWin('')
-      }
-      if (data) {
-        // Data found — populate form and show recap
-        setForm({
-          gratitude: data.gratitude_entry ?? '',
-          q1: data.q1_intention ?? '',
-          q2: data.q2_focus ?? '',
-          q3: data.q3_energy ?? '',
-          q4: data.q4_pattern ?? '',
-          q5: data.q5_standard ?? '',
-          q6: data.q6_win ?? '',
-        })
-        setSaved(true)
-      } else {
-        // No data for today — check AsyncStorage for a draft
-        const draftKey = `igj_morning_draft_${today}`
-        try {
-          const raw = await AsyncStorage.getItem(draftKey)
-          if (raw) {
-            const draft = JSON.parse(raw) as Partial<Form>
-            setForm(f => ({ ...f, ...draft }))
-          } else {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { setSaved(false); return }
+        const today = new Date().toISOString().split('T')[0]
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 6000)
+        )
+        const [{ data }, { data: profile }, { data: winData }] = await Promise.race([
+          Promise.all([
+            supabase.from('morning_checkins')
+              .select('gratitude_entry,q1_intention,q2_focus,q3_energy,q4_pattern,q5_standard,q6_win')
+              .eq('user_id', user.id).eq('date', today).maybeSingle(),
+            supabase.from('user_profiles').select('evening_time').eq('id', user.id).maybeSingle(),
+            supabase.from('morning_checkins').select('id,q6_win').eq('user_id', user.id).eq('date', yesterday).maybeSingle(),
+          ]),
+          timeout,
+        ])
+        if (profile?.evening_time) {
+          const [h, m] = (profile.evening_time as string).split(':').map(Number)
+          const fmt = new Date(); fmt.setHours(h, m, 0)
+          setEveningTime(fmt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))
+        }
+        if (winData?.q6_win) {
+          setYesterdayWin(winData.q6_win)
+        } else {
+          setYesterdayWin('')
+        }
+        // If yesterday had no check-in at all, flag it
+        setYesterdayMissed(!winData)
+        if (data) {
+          // Data found — populate form and show recap
+          setForm({
+            gratitude: data.gratitude_entry ?? '',
+            q1: data.q1_intention ?? '',
+            q2: data.q2_focus ?? '',
+            q3: data.q3_energy ?? '',
+            q4: data.q4_pattern ?? '',
+            q5: data.q5_standard ?? '',
+            q6: data.q6_win ?? '',
+          })
+          setSaved(true)
+        } else {
+          // No data for today — check AsyncStorage for a draft
+          const draftKey = `igj_morning_draft_${today}`
+          try {
+            const raw = await AsyncStorage.getItem(draftKey)
+            if (raw) {
+              const draft = JSON.parse(raw) as Partial<Form>
+              setForm(f => ({ ...f, ...draft }))
+            } else {
+              setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
+            }
+          } catch {
             setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
           }
-        } catch {
-          setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
+          setSaved(false)
         }
+      } catch {
         setSaved(false)
       }
     }
@@ -159,7 +173,7 @@ export default function MorningScreen() {
       await supabase.from('morning_checkins').upsert({
         user_id: user.id, date: today, gratitude_entry: form.gratitude,
         q1_intention: form.q1, q2_focus: form.q2, q3_energy: form.q3,
-        q4_pattern: form.q4, q5_standard: form.q5, q6_win: form.q6, is_abbreviated: false,
+        q4_pattern: form.q4, q5_standard: form.q5, q6_win: form.q6, is_abbreviated: quickMode,
       })
       await updateStreak(user.id, supabase)
     }
@@ -172,6 +186,19 @@ export default function MorningScreen() {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setSaving(false)
     setSaved(true)
+  }
+
+  async function saveRecovery() {
+    const { data: { user } } = await supabase.auth.getUser()
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+    if (user && recoveryNote.trim()) {
+      await supabase.from('morning_checkins').upsert({
+        user_id: user.id, date: yesterday,
+        q4_pattern: recoveryNote.trim(), is_abbreviated: true,
+      })
+    }
+    setRecoverySaved(true)
+    setYesterdayMissed(false)
   }
 
   // ── Checking Supabase — show brief spinner, not a blank form ──
@@ -205,10 +232,12 @@ export default function MorningScreen() {
               <Text style={s.doneIconText}>✓</Text>
             </View>
             <Text style={[s.doneTitle, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular' }]}>
-              Morning locked in.
+              {form.q1 ? 'Go be that.' : 'Morning locked in.'}
             </Text>
             <Text style={[s.doneSub, { color: t.textSecondary }]}>
-              You've set the field for today. Come back this evening to reflect on how it actually went.
+              {form.q1
+                ? `You said you need to be "${form.q1}". That's the standard for today.`
+                : "You've set the field. Come back this evening to reflect on how it actually went."}
             </Text>
           </View>
 
@@ -256,6 +285,48 @@ export default function MorningScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
 
+          {/* Missed yesterday recovery */}
+          {yesterdayMissed && !recoverySaved && (
+            <View style={[s.recoveryCard, { backgroundColor: t.amberDim, borderColor: t.amberBorder }]}>
+              <Text style={[s.recoveryLabel, { color: t.amber }]}>YESTERDAY WENT UNLOGGED</Text>
+              <Text style={[s.recoveryQ, { color: t.textPrimary }]}>What got in the way?</Text>
+              <Input
+                value={recoveryNote}
+                onChangeText={setRecoveryNote}
+                placeholder="Yesterday I missed because…"
+                multiline
+                numberOfLines={2}
+                focusColor="blue"
+                style={{ marginBottom: 10 }}
+              />
+              <TouchableOpacity
+                onPress={saveRecovery}
+                activeOpacity={0.8}
+                style={[s.recoveryBtn, { backgroundColor: t.amber }]}
+              >
+                <Text style={[s.recoveryBtnText]}>Note it & move on →</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Quick mode toggle */}
+          {!quickMode && (
+            <TouchableOpacity onPress={() => setQuickMode(true)} activeOpacity={0.7} style={s.quickToggle}>
+              <Text style={[s.quickToggleText, { color: t.textTertiary }]}>Pressed for time? → Quick check-in (1 question)</Text>
+            </TouchableOpacity>
+          )}
+          {quickMode && (
+            <View style={[s.quickBanner, { backgroundColor: t.bg3, borderColor: t.border }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={[s.quickBannerLabel, { color: t.textSecondary }]}>Quick check-in</Text>
+                <TouchableOpacity onPress={() => setQuickMode(false)}>
+                  <Text style={[{ color: t.textTertiary, fontSize: 12 }]}>Full version →</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={[s.quickBannerSub, { color: t.textTertiary }]}>One question. Sets the standard for the day.</Text>
+            </View>
+          )}
+
           {/* Yesterday's win mirror */}
           {yesterdayWin.length > 0 && (
             <View style={[s.yesterdayCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.amber }]}>
@@ -264,29 +335,35 @@ export default function MorningScreen() {
             </View>
           )}
 
-          <View style={s.qBlock}>
-            <Text style={[s.sectionLabel, { color: t.textTertiary }]}>State primer</Text>
-            <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>
-              What's already working in your life that you're not giving enough credit to?
-            </Text>
-            <Text style={[s.qSub, { color: t.textSecondary }]}>This isn't positivity. It's pattern calibration. You can't see clearly from a deficit lens.</Text>
-            <Input value={form.gratitude} onChangeText={set('gratitude')} placeholder="What's already working is…" multiline numberOfLines={3} focusColor="blue" />
-            {form.gratitude.length > 0 && (
-              <Text style={[s.wordCount, { color: t.textTertiary }]}>{gratitudeWordCount} {gratitudeWordCount === 1 ? 'word' : 'words'}</Text>
-            )}
-            <View style={s.chips}>
-              {CHIPS.gratitude.map(c => <Chip key={c} label={c} onPress={() => set('gratitude')(c)} />)}
+          {!quickMode && (
+            <View style={s.qBlock}>
+              <Text style={[s.sectionLabel, { color: t.textTertiary }]}>State primer</Text>
+              <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>
+                What's already working in your life that you're not giving enough credit to?
+              </Text>
+              <Text style={[s.qSub, { color: t.textSecondary }]}>This isn't positivity. It's pattern calibration. You can't see clearly from a deficit lens.</Text>
+              <Input value={form.gratitude} onChangeText={set('gratitude')} placeholder="What's already working is…" multiline numberOfLines={3} focusColor="blue" />
+              {form.gratitude.length > 0 && (
+                <Text style={[s.wordCount, { color: t.textTertiary }]}>{gratitudeWordCount} {gratitudeWordCount === 1 ? 'word' : 'words'}</Text>
+              )}
+              <View style={s.chips}>
+                {CHIPS.gratitude.map(c => <Chip key={c} label={c} onPress={() => set('gratitude')(c)} />)}
+              </View>
             </View>
-          </View>
+          )}
 
           <QuestionBlock label="Who do I need to be today?" sub="Identity first. Actions follow." value={form.q1} onChangeText={set('q1')} placeholder="Today I need to be someone who…" chips={CHIPS.q1} />
-          <QuestionBlock label="What's the one thing that matters most?" sub="One thing. Not a list." value={form.q2} onChangeText={set('q2')} placeholder="The one thing is…" chips={CHIPS.q2} />
-          <QuestionBlock label="What's my energy level — and what's driving it?" sub="Name it accurately. You can only manage what you can see." value={form.q3} onChangeText={set('q3')} placeholder="My energy is… because…" chips={CHIPS.q3} />
-          <QuestionBlock label="What pattern am I watching for today?" sub="Name it before it shows up. That's the practice." value={form.q4} onChangeText={set('q4')} placeholder="The pattern I'm watching for is…" chips={CHIPS.q4} />
-          <QuestionBlock label="What standard am I holding myself to today?" sub="Not a goal. A non-negotiable." value={form.q5} onChangeText={set('q5')} placeholder="My standard today is…" chips={CHIPS.q5} />
-          <QuestionBlock label="What would make today a win?" sub="Be specific. Vague intentions produce vague outcomes." value={form.q6} onChangeText={set('q6')} placeholder="Today is a win if…" chips={CHIPS.q6} />
+          {!quickMode && <QuestionBlock label="What's the one thing that matters most?" sub="One thing. Not a list." value={form.q2} onChangeText={set('q2')} placeholder="The one thing is…" chips={CHIPS.q2} />}
+          {!quickMode && <QuestionBlock label="What's my energy level — and what's driving it?" sub="Name it accurately. You can only manage what you can see." value={form.q3} onChangeText={set('q3')} placeholder="My energy is… because…" chips={CHIPS.q3} />}
+          {!quickMode && <QuestionBlock label="What pattern am I watching for today?" sub="Name it before it shows up. That's the practice." value={form.q4} onChangeText={set('q4')} placeholder="The pattern I'm watching for is…" chips={CHIPS.q4} />}
+          {!quickMode && <QuestionBlock label="What standard am I holding myself to today?" sub="Not a goal. A non-negotiable." value={form.q5} onChangeText={set('q5')} placeholder="My standard today is…" chips={CHIPS.q5} />}
+          {!quickMode && <QuestionBlock label="What would make today a win?" sub="Be specific. Vague intentions produce vague outcomes." value={form.q6} onChangeText={set('q6')} placeholder="Today is a win if…" chips={CHIPS.q6} />}
 
-          <Btn label={saving ? 'Saving…' : 'Save morning check-in'} onPress={save} variant="blue" loading={saving} />
+          {quickMode ? (
+            <Btn label={saving ? 'Saving…' : 'Set the standard →'} onPress={save} variant="blue" loading={saving} />
+          ) : (
+            <Btn label={saving ? 'Saving…' : 'Save morning check-in'} onPress={save} variant="blue" loading={saving} />
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -323,4 +400,14 @@ const s = StyleSheet.create({
   recapText:      { fontSize: 15, lineHeight: 24 },
   reminderBox:    { borderRadius: 12, padding: 14, borderWidth: 1, marginTop: 8, marginBottom: 28, alignItems: 'center' },
   reminderText:   { fontSize: 13 },
+  recoveryCard:    { borderRadius: 14, padding: 16, borderWidth: 1, marginBottom: 20 },
+  recoveryLabel:   { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 6 },
+  recoveryQ:       { fontSize: 16, fontWeight: '600', marginBottom: 10, lineHeight: 22 },
+  recoveryBtn:     { padding: 12, borderRadius: 12, alignItems: 'center' },
+  recoveryBtnText: { fontSize: 13, fontWeight: '600', color: '#0e0e0c' },
+  quickToggle:     { alignSelf: 'flex-start', marginBottom: 20, paddingVertical: 4 },
+  quickToggleText: { fontSize: 12 },
+  quickBanner:     { borderRadius: 12, padding: 14, borderWidth: 1, marginBottom: 20 },
+  quickBannerLabel:{ fontSize: 13, fontWeight: '600' },
+  quickBannerSub:  { fontSize: 12 },
 })

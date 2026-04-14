@@ -15,64 +15,81 @@ export default function DataBridgeScreen() {
   const router  = useRouter()
   const t       = useTheme()
   const [data, setData]       = useState<BridgeData>({ daysCompleted: 0, avgScore: 0, lowestDim: '', topPattern: '' })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [totalDays, setTotalDays]             = useState(0)
   const [daysSinceFirst, setDaysSinceFirst]   = useState(0)
   const weeklyUnlocked = totalDays >= 7 || daysSinceFirst >= 7
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
 
-      // Check unlock status — fetch all check-in dates (morning + evening)
-      const [{ data: allMornings }, { data: allEvenings }] = await Promise.all([
-        supabase.from('morning_checkins').select('date').eq('user_id', user.id),
-        supabase.from('evening_checkins').select('date').eq('user_id', user.id),
-      ])
-      const allDateSet = new Set([
-        ...(allMornings ?? []).map((r: { date: string }) => r.date),
-        ...(allEvenings ?? []).map((r: { date: string }) => r.date),
-      ])
-      const morningDates = [...allDateSet].sort()
-      const total = allDateSet.size
-      const first = morningDates[0]
-      const sinceFirst = first
-        ? Math.floor((Date.now() - new Date(first + 'T12:00:00').getTime()) / 86400000)
-        : 0
-      setTotalDays(total)
-      setDaysSinceFirst(sinceFirst)
-      if (total < 7 && sinceFirst < 7) { setLoading(false); return }
+        // Check unlock status — fetch all check-in dates (morning + evening)
+        const timeout1 = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 6000)
+        )
+        const [{ data: allMornings }, { data: allEvenings }] = await Promise.race([
+          Promise.all([
+            supabase.from('morning_checkins').select('date').eq('user_id', user.id),
+            supabase.from('evening_checkins').select('date').eq('user_id', user.id),
+          ]),
+          timeout1,
+        ])
+        const allDateSet = new Set([
+          ...(allMornings ?? []).map((r: { date: string }) => r.date),
+          ...(allEvenings ?? []).map((r: { date: string }) => r.date),
+        ])
+        const morningDates = [...allDateSet].sort()
+        const total = allDateSet.size
+        const first = morningDates[0]
+        const sinceFirst = first
+          ? Math.floor((Date.now() - new Date(first + 'T12:00:00').getTime()) / 86400000)
+          : 0
+        setTotalDays(total)
+        setDaysSinceFirst(sinceFirst)
+        if (total < 7 && sinceFirst < 7) { return }
 
-      const weekStart = getWeekStart()
-      const weekEnd   = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6)
-      const weekEndStr = weekEnd.toISOString().split('T')[0]
+        const weekStart = getWeekStart()
+        const weekEnd   = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6)
+        const weekEndStr = weekEnd.toISOString().split('T')[0]
 
-      const [{ data: scorecards }, { data: insights }] = await Promise.all([
-        supabase.from('daily_scorecards').select('*').eq('user_id', user.id).gte('date', weekStart).lte('date', weekEndStr),
-        supabase.from('daily_insights').select('lowest_dimension').eq('user_id', user.id).gte('date', weekStart).lte('date', weekEndStr).eq('is_saved', true),
-      ])
+        const timeout2 = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 6000)
+        )
+        const [{ data: scorecards }, { data: insights }] = await Promise.race([
+          Promise.all([
+            supabase.from('daily_scorecards').select('*').eq('user_id', user.id).gte('date', weekStart).lte('date', weekEndStr),
+            supabase.from('daily_insights').select('lowest_dimension').eq('user_id', user.id).gte('date', weekStart).lte('date', weekEndStr).eq('is_saved', true),
+          ]),
+          timeout2,
+        ])
 
-      const daysCompleted = scorecards?.length ?? 0
-      let avgScore = 0, lowestDim = ''
+        const daysCompleted = scorecards?.length ?? 0
+        let avgScore = 0, lowestDim = ''
 
-      if (daysCompleted > 0) {
-        const dims: Record<string, number[]> = { awareness: [], intention: [], state: [], presence: [], ownership: [] }
-        let total = 0, count = 0
-        scorecards!.forEach((sc: Record<string, number>) => {
-          Object.keys(dims).forEach(k => { if (sc[k]) { dims[k].push(sc[k]); total += sc[k]; count++ } })
-        })
-        avgScore = count > 0 ? parseFloat((total / count).toFixed(1)) : 0
-        const avgs = Object.entries(dims).map(([k, vs]) => [k, vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : 0] as [string, number])
-        lowestDim = avgs.filter(([, v]) => v > 0).sort(([, a], [, b]) => a - b)[0]?.[0] ?? ''
+        if (daysCompleted > 0) {
+          const dims: Record<string, number[]> = { awareness: [], intention: [], state: [], presence: [], ownership: [] }
+          let total = 0, count = 0
+          scorecards!.forEach((sc: Record<string, number>) => {
+            Object.keys(dims).forEach(k => { if (sc[k]) { dims[k].push(sc[k]); total += sc[k]; count++ } })
+          })
+          avgScore = count > 0 ? parseFloat((total / count).toFixed(1)) : 0
+          const avgs = Object.entries(dims).map(([k, vs]) => [k, vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : 0] as [string, number])
+          lowestDim = avgs.filter(([, v]) => v > 0).sort(([, a], [, b]) => a - b)[0]?.[0] ?? ''
+        }
+
+        const patternCounts: Record<string, number> = {}
+        insights?.forEach(i => { if (i.lowest_dimension) patternCounts[i.lowest_dimension] = (patternCounts[i.lowest_dimension] ?? 0) + 1 })
+        const topPattern = Object.entries(patternCounts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? ''
+
+        setData({ daysCompleted, avgScore, lowestDim, topPattern })
+      } catch {
+        // timeout or network error — show empty state instead of hanging
+      } finally {
+        setLoading(false)
       }
-
-      const patternCounts: Record<string, number> = {}
-      insights?.forEach(i => { if (i.lowest_dimension) patternCounts[i.lowest_dimension] = (patternCounts[i.lowest_dimension] ?? 0) + 1 })
-      const topPattern = Object.entries(patternCounts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? ''
-
-      setData({ daysCompleted, avgScore, lowestDim, topPattern })
-      setLoading(false)
     }
     load()
   }, [])

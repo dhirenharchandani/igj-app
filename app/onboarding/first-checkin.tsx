@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { View, Text, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
 import { supabase } from '../../src/lib/supabase'
@@ -8,6 +8,7 @@ import { Input } from '../../src/components/ui/Input'
 import { Btn } from '../../src/components/ui/Btn'
 import { Chip } from '../../src/components/ui/Chip'
 import { updateStreak } from '../../src/lib/utils/streak'
+import { useStore } from '../../src/lib/store'
 
 const CHIPS: Record<number, string[]> = {
   1: ['Patient and deliberate', 'Fully present', 'Decisive', 'Disciplined'],
@@ -24,29 +25,36 @@ const QUESTIONS = [
 export default function FirstCheckinScreen() {
   const router  = useRouter()
   const t       = useTheme()
+  const insets  = useSafeAreaInsets()
+  const markMorningDone = useStore(s => s.markMorningDone)
   const [step, setStep]     = useState(0)
   const [answers, setAnswers] = useState(['', '', ''])
-  const [saving, setSaving] = useState(false)
   const [done, setDone]     = useState(false)
 
   function setAnswer(v: string) {
     const next = [...answers]; next[step] = v; setAnswers(next)
   }
 
-  async function complete() {
-    setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const today = new Date().toISOString().split('T')[0]
-    if (user) {
-      await supabase.from('morning_checkins').upsert({
-        user_id: user.id, date: today,
-        q1_intention: answers[0], q2_focus: answers[1], q6_win: answers[2], is_abbreviated: true,
-      })
-      // onboarding_done is set at final onboarding step (schedule screen)
-      await updateStreak(user.id, supabase)
-    }
-    setSaving(false)
+  function complete() {
+    // Advance immediately — never block on network
+    markMorningDone()
     setDone(true)
+    // Save in background — fire-and-forget
+    ;(async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const today = new Date().toISOString().split('T')[0]
+          supabase.from('morning_checkins').upsert({
+            user_id: user.id, date: today,
+            q1_intention: answers[0], q2_focus: answers[1], q6_win: answers[2], is_abbreviated: true,
+          }).then(() => {}).catch(() => {})
+          updateStreak(user.id, supabase).catch(() => {})
+        }
+      } catch {
+        // silently ignore — store already updated
+      }
+    })()
   }
 
   if (done) {
@@ -79,7 +87,7 @@ export default function FirstCheckinScreen() {
   const q = QUESTIONS[step]
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {/* Progress dots */}
         <View style={s.dotsRow}>
@@ -94,7 +102,7 @@ export default function FirstCheckinScreen() {
             <Text style={[s.badgeText, { color: t.blue }]}>Your first session</Text>
           </View>
 
-          <Text style={[s.qNum, { color: t.textTertiary }]}>Question {step + 1} of 3</Text>
+          <Text style={[s.qNum, { color: t.textSecondary }]}>Question {step + 1} of 3</Text>
           <Text style={[s.question, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>{q.q}</Text>
           <Text style={[s.qSub, { color: t.textSecondary }]}>{q.sub}</Text>
 
@@ -105,7 +113,10 @@ export default function FirstCheckinScreen() {
               <Chip key={chip} label={chip} onPress={() => setAnswer(chip)} />
             ))}
           </View>
+        </ScrollView>
 
+        {/* Fixed footer — always visible above keyboard */}
+        <View style={[s.footer, { backgroundColor: t.bg, borderTopColor: t.border, paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
           <View style={s.navRow}>
             {step > 0 && (
               <Btn label="← Back" onPress={() => setStep(s => s - 1)} variant="ghost" style={{ flex: 0, paddingHorizontal: 20, width: 'auto' }} />
@@ -113,10 +124,10 @@ export default function FirstCheckinScreen() {
             {step < 2 ? (
               <Btn label="Next →" onPress={() => setStep(s => s + 1)} variant="blue" disabled={answers[step].trim().length < 10} />
             ) : (
-              <Btn label={saving ? 'Saving…' : 'Complete session →'} onPress={complete} variant="teal" disabled={answers[step].trim().length < 10 || saving} loading={saving} />
+              <Btn label="Complete session →" onPress={complete} variant="teal" disabled={answers[step].trim().length < 10} />
             )}
           </View>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -125,14 +136,15 @@ export default function FirstCheckinScreen() {
 const s = StyleSheet.create({
   safe:      { flex: 1 },
   dotsRow:   { flexDirection: 'row', gap: 6, justifyContent: 'center', padding: 20, paddingBottom: 8 },
-  scroll:    { padding: 24, paddingBottom: 48 },
+  scroll:    { padding: 24, paddingBottom: 24 },
   badge:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 28 },
   dot:       { width: 8, height: 8, borderRadius: 4 },
   badgeText: { fontSize: 12, fontWeight: '500' },
   qNum:      { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 20 },
   question:  { fontSize: 24, lineHeight: 32, marginBottom: 10 },
   qSub:      { fontSize: 14, lineHeight: 22, marginBottom: 24 },
-  chips:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 32 },
+  chips:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  footer:    { padding: 12, paddingHorizontal: 20, borderTopWidth: 1 },
   navRow:    { flexDirection: 'row', gap: 10 },
   circle:    { width: 64, height: 64, borderRadius: 32, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
   check:     { fontSize: 28 },

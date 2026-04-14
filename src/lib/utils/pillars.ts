@@ -1,9 +1,9 @@
 export const DAILY_DIMENSIONS = [
-  { key: 'awareness', label: 'Awareness', description: 'How clearly did I see myself today?' },
-  { key: 'intention', label: 'Intention', description: 'Did I live on purpose or on autopilot?' },
-  { key: 'state',     label: 'State',     description: 'Did I manage my internal state?' },
-  { key: 'presence',  label: 'Presence',  description: 'Was I fully in the moments that mattered?' },
-  { key: 'ownership', label: 'Ownership', description: 'Did I take full responsibility for my experience?' },
+  { key: 'awareness', label: 'Awareness', description: 'Did you catch your patterns as they showed up — or only in hindsight?' },
+  { key: 'intention', label: 'Intention', description: 'Did you act from your morning intention, or did the day run you?' },
+  { key: 'state',     label: 'State',     description: 'Did you manage your energy, focus, and emotional tone?' },
+  { key: 'presence',  label: 'Presence',  description: 'Were you actually in the moments that mattered — not just physically there?' },
+  { key: 'ownership', label: 'Ownership', description: 'Did you own your results and reactions fully, without deflecting?' },
 ]
 
 export const WEEKLY_DIMENSIONS = [

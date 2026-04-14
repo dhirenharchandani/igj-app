@@ -35,78 +35,89 @@ export default function PatternsScreen() {
   const [activeDaily, setActiveDaily] = useState('awareness')
   const [activeWeekly, setActiveWeekly] = useState('clarity')
   const [expanded, setExpanded]       = useState<string | null>(null)
-  const [loading, setLoading]         = useState(true)
+  const [loading, setLoading]         = useState(false)
   const [activityMap, setActivityMap] = useState<Map<string, { morning: boolean; evening: boolean }>>(new Map())
   const [topKeywords, setTopKeywords] = useState<{ word: string; count: number }[]>([])
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const thirtyDaysAgo  = new Date(Date.now() - 30  * 86400000).toISOString().split('T')[0]
-      const ninetyDaysAgo  = new Date(Date.now() - 90  * 86400000).toISOString().split('T')[0]
-      const eightWeeksAgo  = new Date(Date.now() - 56  * 86400000).toISOString().split('T')[0]
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const thirtyDaysAgo  = new Date(Date.now() - 30  * 86400000).toISOString().split('T')[0]
+        const ninetyDaysAgo  = new Date(Date.now() - 90  * 86400000).toISOString().split('T')[0]
+        const eightWeeksAgo  = new Date(Date.now() - 56  * 86400000).toISOString().split('T')[0]
 
-      const [
-        { data: allMornings },
-        { data: allEvenings },
-        { data: recentEvenings },
-        { data: daily },
-        { data: weekly },
-        { data: insightRows },
-      ] = await Promise.all([
-        supabase.from('morning_checkins').select('date').eq('user_id', user.id).gte('date', ninetyDaysAgo),
-        supabase.from('evening_checkins').select('date').eq('user_id', user.id).gte('date', ninetyDaysAgo),
-        supabase.from('evening_checkins').select('q2_pattern,q4_learning,date').eq('user_id', user.id).gte('date', thirtyDaysAgo),
-        supabase.from('daily_scorecards').select('*').eq('user_id', user.id).gte('date', thirtyDaysAgo).order('date'),
-        supabase.from('weekly_scorecards').select('*').eq('user_id', user.id).gte('week_start', eightWeeksAgo).order('week_start'),
-        supabase.from('daily_insights').select('id,date,insight_text').eq('user_id', user.id).eq('is_saved', true).order('date', { ascending: false }),
-      ])
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 6000)
+        )
+        const [
+          { data: allMornings },
+          { data: allEvenings },
+          { data: recentEvenings },
+          { data: daily },
+          { data: weekly },
+          { data: insightRows },
+        ] = await Promise.race([
+          Promise.all([
+            supabase.from('morning_checkins').select('date').eq('user_id', user.id).gte('date', ninetyDaysAgo),
+            supabase.from('evening_checkins').select('date').eq('user_id', user.id).gte('date', ninetyDaysAgo),
+            supabase.from('evening_checkins').select('q2_pattern,q4_learning,date').eq('user_id', user.id).gte('date', thirtyDaysAgo),
+            supabase.from('daily_scorecards').select('*').eq('user_id', user.id).gte('date', thirtyDaysAgo).order('date'),
+            supabase.from('weekly_scorecards').select('*').eq('user_id', user.id).gte('week_start', eightWeeksAgo).order('week_start'),
+            supabase.from('daily_insights').select('id,date,insight_text').eq('user_id', user.id).eq('is_saved', true).order('date', { ascending: false }),
+          ]),
+          timeout,
+        ])
 
-      // Day count (union of all-time mornings + evenings for the streak display)
-      const uniqueDays = new Set([
-        ...(allMornings ?? []).map((r: { date: string }) => r.date),
-        ...(allEvenings ?? []).map((r: { date: string }) => r.date),
-      ])
-      setDayCount(uniqueDays.size)
+        // Day count (union of all-time mornings + evenings for the streak display)
+        const uniqueDays = new Set([
+          ...(allMornings ?? []).map((r: { date: string }) => r.date),
+          ...(allEvenings ?? []).map((r: { date: string }) => r.date),
+        ])
+        setDayCount(uniqueDays.size)
 
-      // Build activity map for heatmap (last 90 days)
-      const aMap = new Map<string, { morning: boolean; evening: boolean }>()
-      ;(allMornings ?? []).forEach((r: { date: string }) => {
-        const entry = aMap.get(r.date) ?? { morning: false, evening: false }
-        entry.morning = true
-        aMap.set(r.date, entry)
-      })
-      ;(allEvenings ?? []).forEach((r: { date: string }) => {
-        const entry = aMap.get(r.date) ?? { morning: false, evening: false }
-        entry.evening = true
-        aMap.set(r.date, entry)
-      })
-      setActivityMap(aMap)
+        // Build activity map for heatmap (last 90 days)
+        const aMap = new Map<string, { morning: boolean; evening: boolean }>()
+        ;(allMornings ?? []).forEach((r: { date: string }) => {
+          const entry = aMap.get(r.date) ?? { morning: false, evening: false }
+          entry.morning = true
+          aMap.set(r.date, entry)
+        })
+        ;(allEvenings ?? []).forEach((r: { date: string }) => {
+          const entry = aMap.get(r.date) ?? { morning: false, evening: false }
+          entry.evening = true
+          aMap.set(r.date, entry)
+        })
+        setActivityMap(aMap)
 
-      // Build top keywords from last 30 days evening checkins
-      const wordCounts = new Map<string, number>()
-      ;(recentEvenings ?? []).forEach((row: { q2_pattern?: string; q4_learning?: string }) => {
-        const text = [row.q2_pattern ?? '', row.q4_learning ?? ''].join(' ')
-        text
-          .toLowerCase()
-          .replace(/[^a-z\s]/g, ' ')
-          .split(/\s+/)
-          .forEach(w => {
-            if (w.length < 3 || STOP_WORDS.has(w)) return
-            wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1)
-          })
-      })
-      const sorted = Array.from(wordCounts.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([word, count]) => ({ word: word.charAt(0).toUpperCase() + word.slice(1), count }))
-      setTopKeywords(sorted)
+        // Build top keywords from last 30 days evening checkins
+        const wordCounts = new Map<string, number>()
+        ;(recentEvenings ?? []).forEach((row: { q2_pattern?: string; q4_learning?: string }) => {
+          const text = [row.q2_pattern ?? '', row.q4_learning ?? ''].join(' ')
+          text
+            .toLowerCase()
+            .replace(/[^a-z\s]/g, ' ')
+            .split(/\s+/)
+            .forEach(w => {
+              if (w.length < 3 || STOP_WORDS.has(w)) return
+              wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1)
+            })
+        })
+        const sorted = Array.from(wordCounts.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([word, count]) => ({ word: word.charAt(0).toUpperCase() + word.slice(1), count }))
+        setTopKeywords(sorted)
 
-      setDailyScores(daily ?? [])
-      setWeeklyScores(weekly ?? [])
-      setInsights(insightRows ?? [])
-      setLoading(false)
+        setDailyScores(daily ?? [])
+        setWeeklyScores(weekly ?? [])
+        setInsights(insightRows ?? [])
+      } catch {
+        // timeout or network error — show empty state instead of hanging
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [])
@@ -117,7 +128,7 @@ export default function PatternsScreen() {
     </SafeAreaView>
   )
 
-  if (dayCount < 7) return (
+  if (dayCount < 3) return (
     <SafeAreaView style={[{ flex: 1, backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <View style={[{ borderBottomWidth: 1, padding: 20, paddingBottom: 16, borderBottomColor: t.border }]}>
         <Text style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 4, color: t.teal }}>Your patterns</Text>
@@ -125,15 +136,15 @@ export default function PatternsScreen() {
       </View>
       <View style={{ flex: 1, padding: 24, paddingTop: 48, alignItems: 'center' }}>
         <Text style={{ fontSize: 40, marginBottom: 24 }}>≋</Text>
-        <Text style={{ fontSize: 22, fontWeight: '600', textAlign: 'center', marginBottom: 12, color: t.textPrimary }}>Patterns unlock after 7 days</Text>
+        <Text style={{ fontSize: 22, fontWeight: '600', textAlign: 'center', marginBottom: 12, color: t.textPrimary }}>Patterns unlock after 3 days</Text>
         <Text style={{ fontSize: 15, lineHeight: 24, textAlign: 'center', color: t.textSecondary, marginBottom: 40 }}>
-          Patterns need time to form. Keep going — meaningful data starts appearing after your first week.
+          Patterns need time to form. Keep going — your first insights appear after 3 days.
         </Text>
         <View style={{ width: '100%', backgroundColor: t.bg3, borderRadius: 8, height: 8, overflow: 'hidden', marginBottom: 12, borderWidth: 1, borderColor: t.border }}>
-          <View style={{ height: '100%', borderRadius: 8, backgroundColor: t.teal, width: `${Math.min(100, (dayCount / 7) * 100)}%` as any }} />
+          <View style={{ height: '100%', borderRadius: 8, backgroundColor: t.teal, width: `${Math.min(100, (dayCount / 3) * 100)}%` as any }} />
         </View>
         <Text style={{ fontSize: 13, color: t.textSecondary, fontWeight: '600' }}>
-          {dayCount} <Text style={{ color: t.textTertiary, fontWeight: '400' }}>/ 7 days</Text>
+          {dayCount} <Text style={{ color: t.textTertiary, fontWeight: '400' }}>/ 3 days</Text>
         </Text>
       </View>
       <BottomNav />
@@ -206,6 +217,14 @@ export default function PatternsScreen() {
         <Text style={[s.eyebrow, { color: t.teal }]}>Your patterns</Text>
         <Text style={[s.title, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>Your data. What it's actually showing you.</Text>
       </View>
+
+      {dayCount >= 3 && dayCount < 14 && (
+        <View style={[{ marginHorizontal: 20, marginTop: 12, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: t.amberBorder, backgroundColor: t.amberDim }]}>
+          <Text style={[{ fontSize: 12, lineHeight: 18, color: t.amber }]}>
+            📈 Your patterns are still forming. Keep checking in daily — the data gets meaningfully richer after 2 weeks.
+          </Text>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={s.scroll}>
 

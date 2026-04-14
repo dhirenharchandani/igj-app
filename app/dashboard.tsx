@@ -22,9 +22,10 @@ interface DashState {
   recentEntries: RecentEntry[]; recentScorecards: ScorecardRow[]; insightText: string
   milestoneShown: boolean; milestoneSummary: string; loadingMilestone: boolean
   morningDone: boolean; eveningDone: boolean; scorecardDone: boolean; weeklyResetDone: boolean
-  weeklyUnlocked: boolean
+  weeklyUnlocked: boolean; assessmentDone: boolean
   eveningTime: string
   loading: boolean
+  reassessmentDue: boolean; daysSinceAssessment: number
 }
 
 // Compute streak entirely client-side from an array of date strings (no view dependency)
@@ -62,14 +63,14 @@ function computeStreak(dates: string[]): { current: number; longest: number; tot
 const PHASES = [
   { label: 'Set the Field', sub: 'Morning',   icon: '☀️', step: 1 },
   { label: 'Harvest',       sub: 'Evening',   icon: '🌙', step: 2 },
-  { label: 'Score',         sub: 'Scorecard', icon: '📊', step: 3 },
+  { label: 'Score',         sub: 'Rate the day', icon: '📊', step: 3 },
 ]
 
 export default function DashboardScreen() {
   const router  = useRouter()
   const t       = useTheme()
   const sunday  = isSunday()
-  const { getTodayStatus, profile } = useStore()
+  const { getTodayStatus, profile, onboarding } = useStore()
 
   const [state, setState] = useState<DashState>(() => {
     // Seed from store immediately — no async delay, no flash of wrong state
@@ -83,8 +84,11 @@ export default function DashboardScreen() {
       scorecardDone: stored.scorecardDone,
       weeklyResetDone: false,
       weeklyUnlocked: false,
+      assessmentDone: onboarding.assessment_completed,
       eveningTime: '21:00',
-      loading: true,
+      loading: false,
+      reassessmentDue: false,
+      daysSinceAssessment: 0,
     }
   })
 
@@ -96,15 +100,21 @@ export default function DashboardScreen() {
       morningDone: stored.morningDone,
       eveningDone: stored.eveningDone,
       scorecardDone: stored.scorecardDone,
-      weeklyResetDone: false, loading: true,
+      weeklyResetDone: false,
     }))
 
     async function load() {
+      try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setState(s => ({ ...s, loading: false })); return }
 
       const today     = new Date().toISOString().split('T')[0]
       const weekStart = getWeekStart()
+
+      // 8-second timeout — if any query hangs we still show the dashboard
+      const queryTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('query_timeout')), 8000)
+      )
 
       const [
         { data: supaProfile },
@@ -114,20 +124,25 @@ export default function DashboardScreen() {
         { data: weeklyReset },
         { data: todayScore },
         { data: recentScorecards },
-        { data: allMornings },   // all dates for streak + weekly unlock
+        { data: allMornings },
         { data: recentEvenings },
         { data: insight },
-      ] = await Promise.all([
-        supabase.from('user_profiles').select('identity_gap_text,evening_time').eq('id', user.id).single(),
-        supabase.from('morning_checkins').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
-        supabase.from('evening_checkins').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
-        supabase.from('daily_scorecards').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
-        supabase.from('weekly_resets').select('id').eq('user_id', user.id).eq('week_start', weekStart).maybeSingle(),
-        supabase.from('daily_scorecards').select('awareness,intention,state,presence,ownership').eq('user_id', user.id).eq('date', today).maybeSingle(),
-        supabase.from('daily_scorecards').select('date,awareness,intention,state,presence,ownership').eq('user_id', user.id).order('date', { ascending: false }).limit(14),
-        supabase.from('morning_checkins').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(100),
-        supabase.from('evening_checkins').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
-        supabase.from('daily_insights').select('insight_text').eq('user_id', user.id).eq('date', today).maybeSingle(),
+        { data: assessmentData },
+      ] = await Promise.race([
+        Promise.all([
+          supabase.from('user_profiles').select('identity_gap_text,evening_time').eq('id', user.id).maybeSingle(),
+          supabase.from('morning_checkins').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
+          supabase.from('evening_checkins').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
+          supabase.from('daily_scorecards').select('id').eq('user_id', user.id).eq('date', today).maybeSingle(),
+          supabase.from('weekly_resets').select('id').eq('user_id', user.id).eq('week_start', weekStart).maybeSingle(),
+          supabase.from('daily_scorecards').select('awareness,intention,state,presence,ownership').eq('user_id', user.id).eq('date', today).maybeSingle(),
+          supabase.from('daily_scorecards').select('date,awareness,intention,state,presence,ownership').eq('user_id', user.id).order('date', { ascending: false }).limit(14),
+          supabase.from('morning_checkins').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(100),
+          supabase.from('evening_checkins').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(7),
+          supabase.from('daily_insights').select('insight_text').eq('user_id', user.id).eq('date', today).maybeSingle(),
+          supabase.from('life_assessments').select('id,created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        ]),
+        queryTimeout,
       ])
 
       // Today's score
@@ -188,10 +203,17 @@ export default function DashboardScreen() {
         todayScore: todayScoreVal, recentEntries, recentScorecards: (recentScorecards ?? []) as ScorecardRow[],
         insightText: insight?.insight_text ?? '',
         milestoneShown: showMilestone,
-        morningDone: !!morning,
-        eveningDone: !!evening,
-        scorecardDone: !!scorecard,
+        morningDone: storeStatus.morningDone || !!morning,
+        eveningDone: storeStatus.eveningDone || !!evening,
+        scorecardDone: storeStatus.scorecardDone || !!scorecard,
         weeklyResetDone: !!weeklyReset,
+        assessmentDone: onboarding.assessment_completed || !!assessmentData,
+        daysSinceAssessment: assessmentData?.created_at
+          ? Math.floor((Date.now() - new Date((assessmentData as any).created_at).getTime()) / 86400000)
+          : 0,
+        reassessmentDue: !!assessmentData && !!assessmentData?.created_at
+          ? Math.floor((Date.now() - new Date((assessmentData as any).created_at).getTime()) / 86400000) >= 30
+          : false,
         loading: false,
       }))
 
@@ -205,6 +227,10 @@ export default function DashboardScreen() {
           const data = await res.json()
           setState(prev => ({ ...prev, milestoneSummary: data.summary ?? '', loadingMilestone: false }))
         } catch { setState(prev => ({ ...prev, loadingMilestone: false })) }
+      }
+      } catch (e: any) {
+        // Always clear loading — never leave user on a permanent spinner
+        setState(prev => ({ ...prev, loading: false }))
       }
     }
     load()
@@ -371,7 +397,7 @@ export default function DashboardScreen() {
                     {done ? '✓' : p.icon}
                   </Text>
                   <Text style={[s.phaseLabel, { color: done ? t.teal : active ? t.textPrimary : t.textSecondary, opacity: pending ? 0.9 : 1 }]}>{p.label}</Text>
-                  <Text style={[s.phaseSub,  { color: done ? t.teal : active ? t.blue : t.textTertiary,    opacity: pending ? 0.8 : 1 }]}>{p.sub}</Text>
+                  <Text style={[s.phaseSub,  { color: done ? t.teal : active ? t.blue : t.textSecondary,   opacity: pending ? 0.8 : 1 }]}>{p.sub}</Text>
                 </View>
                 {i < PHASES.length - 1 && (
                   <Text style={[s.phaseArrow, { color: phaseStatus[i] ? t.teal : t.border }]}>›</Text>
@@ -410,6 +436,43 @@ export default function DashboardScreen() {
           </View>
         )}
 
+        {/* Assessment nudge — shown until assessment is complete */}
+        {!state.assessmentDone && (
+          <TouchableOpacity
+            onPress={() => router.push('/assessment' as any)}
+            activeOpacity={0.8}
+            style={[s.assessNudge, { backgroundColor: t.purpleDim, borderColor: t.purpleBorder }]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[s.assessNudgeLabel, { color: t.purple }]}>WHOLE LIFE ASSESSMENT</Text>
+              <Text style={[s.assessNudgeTitle, { color: t.textPrimary }]}>Set your baseline before you begin.</Text>
+              <Text style={[s.assessNudgeSub, { color: t.textSecondary }]}>Rate 10 life areas so the journal knows where you're starting from.</Text>
+            </View>
+            <Text style={[s.assessNudgeArrow, { color: t.purple }]}>›</Text>
+          </TouchableOpacity>
+        )}
+
+        {state.assessmentDone && state.reassessmentDue && (
+          <TouchableOpacity
+            onPress={() => router.push('/assessment' as any)}
+            activeOpacity={0.8}
+            style={[s.assessNudge, { backgroundColor: t.purpleDim, borderColor: t.purpleBorder }]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[s.assessNudgeLabel, { color: t.purple }]}>
+                {state.daysSinceAssessment >= 90 ? '90-DAY REASSESSMENT' : '30-DAY REASSESSMENT'}
+              </Text>
+              <Text style={[s.assessNudgeTitle, { color: t.textPrimary }]}>
+                {state.daysSinceAssessment >= 90 ? '90 days in. What\u2019s shifted?' : '30 days in. How have things moved?'}
+              </Text>
+              <Text style={[s.assessNudgeSub, { color: t.textSecondary }]}>
+                Retake the whole-life assessment and compare to your baseline.
+              </Text>
+            </View>
+            <Text style={[s.assessNudgeArrow, { color: t.purple }]}>›</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Hero CTA */}
         <View style={[s.heroCard, { backgroundColor: t.bg2, borderLeftColor: hero.color }]}>
           {hero.phase > 0 && (
@@ -436,6 +499,26 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {(() => {
+          const dow = new Date().getDay()
+          const isMidWeek = dow >= 2 && dow <= 6
+          if (!isMidWeek || weekTrend === null) return null
+          const daysLabels = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+          const todayLabel = daysLabels[dow]
+          return (
+            <View style={[s.midWeekCard, { backgroundColor: t.bg2, borderColor: t.border }]}>
+              <Text style={[s.midWeekLabel, { color: t.textSecondary }]}>{todayLabel.toUpperCase()} · WEEK SO FAR</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4, marginBottom: 4 }}>
+                <Text style={[s.midWeekTrend, { color: weekTrend >= 0 ? t.teal : t.coral }]}>
+                  {weekTrend >= 0 ? `↑ +${weekTrend}` : `↓ ${weekTrend}`}
+                </Text>
+                <Text style={[s.midWeekSub, { color: t.textSecondary }]}>vs last week</Text>
+              </View>
+              <Text style={[s.midWeekHint, { color: t.textTertiary }]}>Sunday closes the loop.</Text>
+            </View>
+          )
+        })()}
 
         {/* Stats row */}
         <View style={s.statsRow}>
@@ -504,32 +587,28 @@ export default function DashboardScreen() {
 
         {/* Quick nav — always visible, locked until threshold */}
         <View style={s.tiles}>
-          {/* Assessment — unlocks at 3 days */}
+          {/* Assessment — always accessible */}
           <TouchableOpacity
-            onPress={() => state.totalDays >= 3 ? router.push('/assessment' as any) : null}
+            onPress={() => router.push('/assessment' as any)}
+            activeOpacity={0.8}
+            style={[s.tile, { backgroundColor: t.bg3, borderColor: state.assessmentDone ? t.border : t.purpleBorder }]}>
+            <Text style={[s.tileText, { color: t.textPrimary }]}>🧠 Assessment</Text>
+            {!state.assessmentDone && (
+              <Text style={[s.tileSub, { color: t.purple }]}>Not done yet</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Patterns — unlocks at 3 days */}
+          <TouchableOpacity
+            onPress={() => state.totalDays >= 3 ? router.push('/patterns' as any) : null}
             activeOpacity={state.totalDays >= 3 ? 0.8 : 1}
             style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
             <Text style={[s.tileText, { color: t.textPrimary }]}>
-              {state.totalDays >= 3 ? '🧠 Assessment' : '🔒 Assessment'}
+              {state.totalDays >= 3 ? '📊 Patterns' : '🔒 Patterns'}
             </Text>
             {state.totalDays < 3 && (
               <Text style={[s.tileSub, { color: t.textSecondary }]}>
                 {Math.max(0, 3 - state.totalDays)} day{Math.max(0, 3 - state.totalDays) !== 1 ? 's' : ''} to unlock
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Patterns — unlocks at 7 days */}
-          <TouchableOpacity
-            onPress={() => state.totalDays >= 7 ? router.push('/patterns' as any) : null}
-            activeOpacity={state.totalDays >= 7 ? 0.8 : 1}
-            style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
-            <Text style={[s.tileText, { color: t.textPrimary }]}>
-              {state.totalDays >= 7 ? '📊 Patterns' : '🔒 Patterns'}
-            </Text>
-            {state.totalDays < 7 && (
-              <Text style={[s.tileSub, { color: t.textSecondary }]}>
-                {Math.max(0, 7 - state.totalDays)} day{Math.max(0, 7 - state.totalDays) !== 1 ? 's' : ''} to unlock
               </Text>
             )}
           </TouchableOpacity>
@@ -619,14 +698,24 @@ const s = StyleSheet.create({
   recDesc:       { fontSize: 13, lineHeight: 20, marginBottom: 16 },
   ghostBtn:      { padding: 11, borderRadius: 14, borderWidth: 1, alignItems: 'center' },
   ghostBtnText:  { fontSize: 13 },
-  tiles:         { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
-  tile:          { borderRadius: 14, padding: 14, paddingHorizontal: 16, borderWidth: 1 },
-  tileText:      { fontSize: 13, fontWeight: '500', textAlign: 'center' },
+  tiles:         { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  tile:          { flex: 1, borderRadius: 14, padding: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', minHeight: 62 },
+  tileText:      { fontSize: 12, fontWeight: '500', textAlign: 'center' },
   tileSub:       { fontSize: 10, marginTop: 3, textAlign: 'center' },
   activityStrip: { flexDirection: 'row', justifyContent: 'space-between', borderRadius: 14, borderWidth: 1, padding: 12, marginBottom: 14 },
   activityCol:   { flex: 1, alignItems: 'center', paddingVertical: 6, paddingHorizontal: 2 },
   activitySymbol:{ marginBottom: 4, textAlign: 'center' },
   activityLabel: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5 },
+  assessNudge:      { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 16 },
+  assessNudgeLabel: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 4 },
+  assessNudgeTitle: { fontSize: 14, fontWeight: '600', marginBottom: 3 },
+  assessNudgeSub:   { fontSize: 12, lineHeight: 18 },
+  assessNudgeArrow: { fontSize: 24, marginLeft: 8 },
+  midWeekCard:      { borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 20 },
+  midWeekLabel:     { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 2 },
+  midWeekTrend:     { fontSize: 22, fontWeight: '700' },
+  midWeekSub:       { fontSize: 13 },
+  midWeekHint:      { fontSize: 11, marginTop: 2 },
   gapCard:       { borderRadius: 14, padding: 16, borderLeftWidth: 3, marginBottom: 16 },
   gapLabel:      { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 8 },
   gapText:       { fontSize: 15, lineHeight: 24, fontStyle: 'italic', fontFamily: 'DMSerifDisplay_400Regular_Italic' },

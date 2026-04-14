@@ -6,6 +6,20 @@ import { useTheme } from '../../src/ThemeContext'
 import { supabase } from '../../src/lib/supabase'
 import { Input } from '../../src/components/ui/Input'
 import { Btn } from '../../src/components/ui/Btn'
+import { Chip } from '../../src/components/ui/Chip'
+
+const GAP_CHIPS = [
+  "I know what to do but I don't consistently do it",
+  "I react emotionally when I should respond with intention",
+  "I start strong but lose momentum before the finish",
+  "I'm building the business but losing myself in the process",
+  "I chase distraction instead of doing the hard thing",
+  "I play small to avoid the risk of going all in",
+  "I repeat the same patterns no matter how much I learn",
+  "I sacrifice depth for the appearance of productivity",
+  "I put everyone else first and run on empty",
+  "I'm successful on paper but disconnected from purpose",
+]
 
 type Step = 1 | 2 | 3 | 4
 
@@ -37,19 +51,17 @@ export default function IdentityScreen() {
   const [step, setStep]     = useState<Step>(1)
   const [gapText, setGapText] = useState('')
   const [goal, setGoal]     = useState('')
-  const [saving, setSaving] = useState(false)
 
   async function saveAndContinue() {
-    setSaving(true)
+    // Navigate immediately — save in background so there's no wait
+    setStep(4)
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('user_profiles').upsert({
+      supabase.from('user_profiles').upsert({
         id: user.id,
         identity_gap_text: gapText, focus_pillar: goal,
-      })
+      }).then(() => {}).catch(() => {})
     }
-    setSaving(false)
-    setStep(4)
   }
 
   return (
@@ -68,8 +80,14 @@ export default function IdentityScreen() {
                 What's the gap between who you are and who you're capable of being?
               </Text>
               <Text style={[s.sub, { color: t.textSecondary }]}>No right answer. Write what's actually true right now.</Text>
-              <Input value={gapText} onChangeText={setGapText} placeholder="The gap I keep running into is…" multiline numberOfLines={5} focusColor="purple" style={{ marginBottom: 24 }} />
-              <Btn label="Continue →" onPress={() => setStep(2)} variant="purple" disabled={gapText.trim().length < 20} />
+              <Input value={gapText} onChangeText={setGapText} placeholder="The gap I keep running into is…" multiline numberOfLines={4} focusColor="purple" style={{ marginBottom: 14 }} />
+              <Text style={[s.chipsLabel, { color: t.textTertiary }]}>Common gaps — tap to use</Text>
+              <View style={s.chips}>
+                {GAP_CHIPS.map(chip => (
+                  <Chip key={chip} label={chip} onPress={() => setGapText(chip)} />
+                ))}
+              </View>
+              <Btn label="Continue →" onPress={() => setStep(2)} variant="purple" disabled={gapText.trim().length < 10} />
             </View>
           )}
 
@@ -104,8 +122,8 @@ export default function IdentityScreen() {
 
           {step === 3 && (
             <View style={{ alignItems: 'center' }}>
-              <View style={[s.circle, { backgroundColor: t.purpleDim, borderColor: t.purpleBorder }]}>
-                <Text style={{ fontSize: 28 }}>✓</Text>
+              <View style={[s.circle, { backgroundColor: t.purpleDim, borderColor: t.purple }]}>
+                <Text style={{ fontSize: 28, color: t.purple }}>✓</Text>
               </View>
               <Text style={[s.heading2, { color: t.textPrimary, textAlign: 'center' }]}>Your starting point is set.</Text>
               <Text style={[s.sub, { color: t.textSecondary, textAlign: 'center' }]}>What you just named is the work. The journal will help you track the patterns underneath it.</Text>
@@ -113,10 +131,12 @@ export default function IdentityScreen() {
                 <Text style={[s.gapLabel, { color: t.purple }]}>Your gap</Text>
                 <Text style={[s.gapText, { color: t.textSecondary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>{gapText}</Text>
               </View>
-              <View style={[s.goalBadge, { backgroundColor: t.purpleDim, borderColor: t.purpleBorder }]}>
-                <Text style={[s.goalBadgeText, { color: t.purple }]}>{GOALS.find(g => g.value === goal)?.label}</Text>
+              <View style={[s.gapCard, { backgroundColor: t.bg2, borderColor: t.border, borderLeftColor: t.purple }]}>
+                <Text style={[s.gapLabel, { color: t.purple }]}>Your focus</Text>
+                <Text style={[s.focusValue, { color: t.textPrimary }]}>{GOALS.find(g => g.value === goal)?.label}</Text>
+                <Text style={[s.focusDesc, { color: t.textSecondary }]}>{GOALS.find(g => g.value === goal)?.desc}</Text>
               </View>
-              <Btn label={saving ? 'Saving…' : 'Start your first session →'} onPress={saveAndContinue} variant="purple" loading={saving} style={{ marginTop: 16 }} />
+              <Btn label="Start your first session →" onPress={saveAndContinue} variant="purple" style={{ marginTop: 16 }} />
               <TouchableOpacity onPress={() => setStep(2)} style={{ marginTop: 16 }}>
                 <Text style={[s.backText, { color: t.textSecondary }]}>Change my focus</Text>
               </TouchableOpacity>
@@ -125,13 +145,13 @@ export default function IdentityScreen() {
 
           {step === 4 && (
             <View style={{ alignItems: 'center' }}>
-              <View style={[s.circle, { backgroundColor: t.tealDim, borderColor: t.tealBorder }]}>
-                <Text style={{ fontSize: 28 }}>▶</Text>
+              <View style={[s.circle, { backgroundColor: t.tealDim, borderColor: t.teal }]}>
+                <Text style={{ fontSize: 28, color: t.teal }}>▶</Text>
               </View>
               <Text style={[s.heading2, { color: t.textPrimary, textAlign: 'center' }]}>First session, starting now.</Text>
               <Text style={[s.sub, { color: t.textSecondary, textAlign: 'center' }]}>This is an abbreviated check-in — just 3 questions. No pressure.</Text>
               <Btn label="Begin →" onPress={() => router.push('/onboarding/first-checkin')} variant="teal" style={{ marginTop: 24 }} />
-              <Text style={[s.hint, { color: t.textTertiary }]}>Takes about 3 minutes</Text>
+              <Text style={[s.hint, { color: t.textSecondary }]}>Takes about 3 minutes</Text>
             </View>
           )}
 
@@ -151,6 +171,8 @@ const s = StyleSheet.create({
   sub:         { fontSize: 14, lineHeight: 22, marginBottom: 28 },
   back:        { marginBottom: 24 },
   backText:    { fontSize: 14 },
+  chipsLabel:  { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 10 },
+  chips:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
   goalCard:    { borderRadius: 14, padding: 16, borderWidth: 1 },
   goalTitle:   { fontSize: 15, fontWeight: '600', marginBottom: 4 },
   goalDesc:    { fontSize: 13, lineHeight: 20 },
@@ -158,7 +180,7 @@ const s = StyleSheet.create({
   gapCard:     { borderRadius: 16, padding: 20, borderWidth: 1, borderLeftWidth: 3, marginBottom: 16, width: '100%' },
   gapLabel:    { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 10 },
   gapText:     { fontSize: 15, lineHeight: 24 },
-  goalBadge:   { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, marginBottom: 8 },
-  goalBadgeText: { fontSize: 12, fontWeight: '500' },
+  focusValue:  { fontSize: 17, fontWeight: '600', marginBottom: 4 },
+  focusDesc:   { fontSize: 13, lineHeight: 20 },
   hint:        { fontSize: 12, marginTop: 12 },
 })

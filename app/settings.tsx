@@ -20,50 +20,68 @@ export default function SettingsScreen() {
   const { profile, setTheme, updateProfile } = useStore()
   const isDark  = profile.theme === 'dark'
 
-  const [morningDate, setMorningDate] = useState(new Date())
-  const [eveningDate, setEveningDate] = useState(new Date())
+  // Seed time pickers from store so values show immediately on every visit
+  const parseTime = (t: string) => {
+    const [h, m] = (t ?? '07:00:00').split(':').map(Number)
+    const d = new Date(); d.setHours(h, m, 0, 0); return d
+  }
+
+  const [morningDate, setMorningDate] = useState(() => parseTime(profile.morning_time || '07:00:00'))
+  const [eveningDate, setEveningDate] = useState(() => parseTime(profile.evening_time || '21:00:00'))
   const [showMorningPicker, setShowMorningPicker] = useState(false)
   const [showEveningPicker, setShowEveningPicker] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saved,  setSaved]  = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [saving, setSaving]   = useState(false)
+  const [saved,  setSaved]    = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   // Notifications
   const [notifEnabled, setNotifEnabled] = useState(false)
 
-  // Your Mission
-  const [identityGapText, setIdentityGapText] = useState('')
-
-  // Account — seed from store so name shows immediately (store is updated on every save)
-  const [displayName, setDisplayName] = useState(profile.display_name || '')
+  // Seed from store for instant display
+  const [identityGapText, setIdentityGapText] = useState(profile.identity_gap_text || '')
+  const [displayName, setDisplayName]         = useState(profile.display_name || '')
 
   useFocusEffect(useCallback(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('morning_time, evening_time, identity_gap_text, display_name')
-        .eq('id', user.id)
-        .single()
-      if (data) {
-        const parseTime = (t: string) => {
-          const [h, m] = (t ?? '07:00:00').split(':').map(Number)
-          const d = new Date(); d.setHours(h, m, 0, 0); return d
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
+        const timeout = new Promise<{ data: null }>((resolve) =>
+          setTimeout(() => resolve({ data: null }), 6000)
+        )
+        const { data } = await Promise.race([
+          supabase
+            .from('user_profiles')
+            .select('morning_time, evening_time, identity_gap_text, display_name')
+            .eq('id', user.id)
+            .maybeSingle(),
+          timeout,
+        ])
+        if (data) {
+          setMorningDate(parseTime(data.morning_time ?? '07:00:00'))
+          setEveningDate(parseTime(data.evening_time ?? '21:00:00'))
+          setIdentityGapText(data.identity_gap_text ?? '')
+          setDisplayName(data.display_name ?? '')
+          // Keep store in sync so fields are instant on next visit
+          updateProfile({
+            morning_time: data.morning_time ?? '07:00:00',
+            evening_time: data.evening_time ?? '21:00:00',
+            identity_gap_text: data.identity_gap_text ?? '',
+            display_name: data.display_name ?? '',
+          })
         }
-        setMorningDate(parseTime(data.morning_time))
-        setEveningDate(parseTime(data.evening_time))
-        setIdentityGapText(data.identity_gap_text ?? '')
-        setDisplayName(data.display_name ?? '')
-      }
 
-      // Load notification preference
-      if (Platform.OS !== 'web') {
-        const stored = await AsyncStorage.getItem(NOTIF_KEY)
-        setNotifEnabled(stored === 'true')
+        if (Platform.OS !== 'web') {
+          const stored = await AsyncStorage.getItem(NOTIF_KEY)
+          setNotifEnabled(stored === 'true')
+        }
+      } catch {
+        // network error — already showing store-seeded values, nothing to do
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false)
     }
     load()
   }, []))
@@ -107,29 +125,46 @@ export default function SettingsScreen() {
 
   async function save() {
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await supabase.from('user_profiles').upsert({
+    setSaveError('')
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not signed in')
+
+      const { error } = await supabase.from('user_profiles').upsert({
         id: user.id,
         morning_time: toTimeStr(morningDate),
         evening_time: toTimeStr(eveningDate),
         identity_gap_text: identityGapText,
         display_name: displayName,
       })
-      updateProfile({ display_name: displayName })
+      if (error) throw error
 
-      // Reschedule notifications if enabled
+      // Persist to store so fields are instant on next visit (even offline)
+      updateProfile({
+        display_name: displayName,
+        morning_time: toTimeStr(morningDate),
+        evening_time: toTimeStr(eveningDate),
+        identity_gap_text: identityGapText,
+      })
+
       if (notifEnabled && Platform.OS !== 'web') {
         await scheduleNotifications()
       }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (e: any) {
+      setSaveError(e?.message ?? 'Save failed. Please try again.')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // ignore errors — navigate away regardless
+    }
     router.replace('/')
   }
 
@@ -212,7 +247,7 @@ export default function SettingsScreen() {
 
             {/* Push notification toggle — native only */}
             {Platform.OS !== 'web' && (
-              <View style={[s.row, { backgroundColor: t.bg2, borderColor: t.border, marginBottom: 20 }]}>
+              <View style={[s.row, { backgroundColor: t.bg2, borderColor: t.border }]}>
                 <View style={{ flex: 1, marginRight: 12 }}>
                   <Text style={[s.rowLabel, { color: t.textPrimary }]}>Reminders</Text>
                   <Text style={[s.rowSub, { color: t.textSecondary }]}>Daily reminders at your morning and evening check-in times</Text>
@@ -225,12 +260,6 @@ export default function SettingsScreen() {
                 />
               </View>
             )}
-
-            <TouchableOpacity onPress={save} disabled={saving} activeOpacity={0.8}
-              style={[s.saveBtn, { backgroundColor: t.teal, opacity: saving ? 0.6 : 1 }]}>
-              <Text style={s.saveBtnText}>{saving ? 'Saving…' : 'Save'}</Text>
-            </TouchableOpacity>
-            {saved && <Text style={[s.savedText, { color: t.teal }]}>✓ Settings updated.</Text>}
           </View>
         )}
 
@@ -266,7 +295,7 @@ export default function SettingsScreen() {
 
         {/* Account */}
         <Text style={[s.sectionTitle, { color: t.textPrimary }]}>Account</Text>
-        <View style={{ marginBottom: 16 }}>
+        <View style={{ marginBottom: 32 }}>
           <Text style={[s.fieldLabel, { color: t.textSecondary }]}>Your name</Text>
           <Input
             value={displayName}
@@ -275,8 +304,17 @@ export default function SettingsScreen() {
             style={[{ backgroundColor: t.bg2, borderColor: t.border, color: t.textPrimary }]}
           />
         </View>
+
+        {/* Single save button covers everything */}
+        <TouchableOpacity onPress={save} disabled={saving} activeOpacity={0.8}
+          style={[s.saveBtn, { backgroundColor: t.teal, opacity: saving ? 0.6 : 1, marginBottom: 12 }]}>
+          <Text style={s.saveBtnText}>{saving ? 'Saving…' : 'Save settings'}</Text>
+        </TouchableOpacity>
+        {saved     && <Text style={[s.savedText, { color: t.teal }]}>✓ All settings saved.</Text>}
+        {saveError && <Text style={[s.savedText, { color: t.coral }]}>{saveError}</Text>}
+
         <TouchableOpacity onPress={signOut} activeOpacity={0.8}
-          style={[s.signOutBtn, { backgroundColor: t.bg2, borderColor: t.border }]}>
+          style={[s.signOutBtn, { backgroundColor: t.bg2, borderColor: t.border, marginTop: 24 }]}>
           <Text style={[s.signOutText, { color: t.coral }]}>Sign out</Text>
         </TouchableOpacity>
 
