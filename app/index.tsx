@@ -48,7 +48,7 @@ export default function LandingScreen() {
   }
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
 

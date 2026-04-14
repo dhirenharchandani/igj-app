@@ -7,7 +7,7 @@ export async function updateStreak(userId: string, supabase: SupabaseClient): Pr
     .from('user_streaks')
     .select('current_streak')
     .eq('user_id', userId)
-    .single()
+    .maybeSingle()
 
   return (data?.current_streak as number) ?? 1
 }

@@ -29,9 +29,10 @@ export default function ScorecardScreen() {
   const [lowestDim, setLowestDim] = useState('')
   const [saved, setSaved] = useState(false)
   const [morningIntention, setMorningIntention] = useState('')
-  const [loadingData, setLoadingData] = useState(false)
+  const [loadingData, setLoadingData] = useState(true)
 
   useFocusEffect(useCallback(() => {
+    setLoadingData(true)
     async function loadMorning() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
@@ -64,39 +65,49 @@ export default function ScorecardScreen() {
 
   async function submit() {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: { session } } = await supabase.auth.getSession()
-    const today = new Date().toISOString().split('T')[0]
-    if (user) {
-      await supabase.from('daily_scorecards').upsert({ user_id: user.id, date: today, ...scores })
-      try {
-        const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/insight`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
-          },
-          body: JSON.stringify({ date: today }),
-        })
-        const data = await res.json()
-        setInsight(data.insight ?? '')
-        setLowestDim(data.lowestDimension ?? '')
-      } catch (e) {
-        console.error('Insight fetch failed:', e)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const today = new Date().toISOString().split('T')[0]
+      if (user) {
+        await supabase.from('daily_scorecards').upsert({ user_id: user.id, date: today, ...scores })
+        try {
+          const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/insight`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+            },
+            body: JSON.stringify({ date: today }),
+          })
+          const data = await res.json()
+          setInsight(data.insight ?? '')
+          setLowestDim(data.lowestDimension ?? '')
+        } catch (e) {
+          console.error('Insight fetch failed:', e)
+        }
       }
+      // ── Mark done in store immediately — dashboard reads this, no async delay ──
+      markScorecardDone()
+    } catch (e) {
+      console.error('Scorecard submit failed:', e)
+    } finally {
+      setLoading(false)
     }
-    // ── Mark done in store immediately — dashboard reads this, no async delay ──
-    markScorecardDone()
-    setLoading(false)
   }
 
   async function saveInsight() {
-    const { data: { user } } = await supabase.auth.getUser()
-    const today = new Date().toISOString().split('T')[0]
-    if (user) {
-      await supabase.from('daily_insights').update({ is_saved: true }).eq('user_id', user.id).eq('date', today)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const today = new Date().toISOString().split('T')[0]
+      if (user) {
+        await supabase.from('daily_insights').update({ is_saved: true }).eq('user_id', user.id).eq('date', today)
+      }
+    } catch (e) {
+      console.error('Save insight failed:', e)
+    } finally {
+      setSaved(true)
     }
-    setSaved(true)
   }
 
   if (loadingData) {
@@ -110,7 +121,7 @@ export default function ScorecardScreen() {
   }
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <View style={[s.tabBar, { backgroundColor: t.bg2, borderBottomColor: t.border }]}>
         {[
           { label: 'Morning',   active: false, href: '/checkin/morning' },

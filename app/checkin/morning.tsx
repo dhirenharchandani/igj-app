@@ -166,39 +166,50 @@ export default function MorningScreen() {
   }
 
   async function save() {
-    setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const today = new Date().toISOString().split('T')[0]
-    if (user) {
-      await supabase.from('morning_checkins').upsert({
-        user_id: user.id, date: today, gratitude_entry: form.gratitude,
-        q1_intention: form.q1, q2_focus: form.q2, q3_energy: form.q3,
-        q4_pattern: form.q4, q5_standard: form.q5, q6_win: form.q6, is_abbreviated: quickMode,
-      })
-      await updateStreak(user.id, supabase)
-    }
+    // Optimistically update UI immediately — don't block on network
     markMorningDone()
-    // Clear draft after successful save
-    try {
-      const today2 = new Date().toISOString().split('T')[0]
-      await AsyncStorage.removeItem(`igj_morning_draft_${today2}`)
-    } catch { /* ignore */ }
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-    setSaving(false)
     setSaved(true)
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+
+    // Save in background — won't block navigation
+    setSaving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const today = new Date().toISOString().split('T')[0]
+      if (user) {
+        await supabase.from('morning_checkins').upsert({
+          user_id: user.id, date: today, gratitude_entry: form.gratitude,
+          q1_intention: form.q1, q2_focus: form.q2, q3_energy: form.q3,
+          q4_pattern: form.q4, q5_standard: form.q5, q6_win: form.q6, is_abbreviated: quickMode,
+        })
+        await updateStreak(user.id, supabase)
+        // Clear draft after successful save
+        await AsyncStorage.removeItem(`igj_morning_draft_${today}`).catch(() => {})
+      }
+    } catch (e) {
+      console.error('Morning check-in save failed:', e)
+      // Don't roll back UI — user already sees completion. Data will sync on next open.
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function saveRecovery() {
-    const { data: { user } } = await supabase.auth.getUser()
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
-    if (user && recoveryNote.trim()) {
-      await supabase.from('morning_checkins').upsert({
-        user_id: user.id, date: yesterday,
-        q4_pattern: recoveryNote.trim(), is_abbreviated: true,
-      })
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+      if (user && recoveryNote.trim()) {
+        await supabase.from('morning_checkins').upsert({
+          user_id: user.id, date: yesterday,
+          q4_pattern: recoveryNote.trim(), is_abbreviated: true,
+        })
+      }
+    } catch (e) {
+      console.error('Recovery note save failed:', e)
+    } finally {
+      setRecoverySaved(true)
+      setYesterdayMissed(false)
     }
-    setRecoverySaved(true)
-    setYesterdayMissed(false)
   }
 
   // ── Checking Supabase — show brief spinner, not a blank form ──
@@ -268,7 +279,7 @@ export default function MorningScreen() {
   // ── Not done yet — show the form ──
   const gratitudeWordCount = wordCount(form.gratitude)
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <View style={[s.tabBar, { backgroundColor: t.bg2, borderBottomColor: t.border }]}>
         {[
           { label: 'Morning',   active: true,  href: '/checkin/morning' },

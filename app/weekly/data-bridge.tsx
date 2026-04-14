@@ -15,7 +15,7 @@ export default function DataBridgeScreen() {
   const router  = useRouter()
   const t       = useTheme()
   const [data, setData]       = useState<BridgeData>({ daysCompleted: 0, avgScore: 0, lowestDim: '', topPattern: '' })
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [totalDays, setTotalDays]             = useState(0)
   const [daysSinceFirst, setDaysSinceFirst]   = useState(0)
   const weeklyUnlocked = totalDays >= 7 || daysSinceFirst >= 7
@@ -99,7 +99,7 @@ export default function DataBridgeScreen() {
   }
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <View style={[s.header, { borderBottomColor: t.border }]}>
         <Text style={[s.eyebrow, { color: t.amber }]}>Weekly Reset</Text>
         <Text style={[s.title, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>Here's your week at a glance.</Text>

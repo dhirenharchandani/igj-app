@@ -35,7 +35,7 @@ export default function PatternsScreen() {
   const [activeDaily, setActiveDaily] = useState('awareness')
   const [activeWeekly, setActiveWeekly] = useState('clarity')
   const [expanded, setExpanded]       = useState<string | null>(null)
-  const [loading, setLoading]         = useState(false)
+  const [loading, setLoading]         = useState(true)
   const [activityMap, setActivityMap] = useState<Map<string, { morning: boolean; evening: boolean }>>(new Map())
   const [topKeywords, setTopKeywords] = useState<{ word: string; count: number }[]>([])
 
@@ -212,7 +212,7 @@ export default function PatternsScreen() {
   }
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <View style={[s.header, { borderBottomColor: t.border }]}>
         <Text style={[s.eyebrow, { color: t.teal }]}>Your patterns</Text>
         <Text style={[s.title, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>Your data. What it's actually showing you.</Text>

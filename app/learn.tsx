@@ -63,7 +63,7 @@ export default function LearnScreen() {
   const [open, setOpen] = useState<number | null>(null)
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <View style={[s.header, { borderBottomColor: t.border }]}>
         <Text style={[s.eyebrow, { color: t.gray }]}>Library</Text>
         <Text style={[s.title, { color: t.textPrimary }]}>Learn More</Text>

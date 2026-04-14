@@ -166,21 +166,30 @@ export default function EveningScreen() {
   }
 
   async function save() {
-    setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const today = new Date().toISOString().split('T')[0]
-    if (user) {
-      await supabase.from('evening_checkins').upsert({
-        user_id: user.id, date: today,
-        q1_delivered: form.q1, q2_pattern: form.q2, q3_gap: form.q3, q4_learning: form.q4, q5_tomorrow: form.q5,
-      })
-    }
+    // Optimistically update UI immediately — don't block on network
     markEveningDone()
-    // Clear the draft now that the real data is saved
-    await AsyncStorage.removeItem(`igj_evening_draft_${today}`)
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-    setSaving(false)
     setSaved(true)  // Show completion screen — user taps "Score the day" to continue
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+
+    // Save in background — won't block navigation
+    setSaving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const today = new Date().toISOString().split('T')[0]
+      if (user) {
+        await supabase.from('evening_checkins').upsert({
+          user_id: user.id, date: today,
+          q1_delivered: form.q1, q2_pattern: form.q2, q3_gap: form.q3, q4_learning: form.q4, q5_tomorrow: form.q5,
+        })
+        // Clear the draft now that the real data is saved
+        await AsyncStorage.removeItem(`igj_evening_draft_${today}`).catch(() => {})
+      }
+    } catch (e) {
+      console.error('Evening check-in save failed:', e)
+      // Don't roll back UI — user already sees completion. Data will sync on next open.
+    } finally {
+      setSaving(false)
+    }
   }
 
   // ── Checking Supabase ──
@@ -239,7 +248,7 @@ export default function EveningScreen() {
 
   // ── Not done yet — show the form ──
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <View style={[s.tabBar, { backgroundColor: t.bg2, borderBottomColor: t.border }]}>
         {[
           { label: 'Morning',   active: false, href: '/checkin/morning' },

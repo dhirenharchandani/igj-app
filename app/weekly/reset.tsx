@@ -66,12 +66,17 @@ export default function WeeklyResetScreen() {
 
   async function finish() {
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await supabase.from('weekly_resets').upsert({ user_id: user.id, week_start: getWeekStart(), ...data })
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase.from('weekly_resets').upsert({ user_id: user.id, week_start: getWeekStart(), ...data })
+      }
+    } catch (e) {
+      console.error('Weekly reset save failed:', e)
+    } finally {
+      setSaving(false)
+      router.push('/weekly/scorecard')
     }
-    setSaving(false)
-    router.push('/weekly/scorecard')
   }
 
   return (

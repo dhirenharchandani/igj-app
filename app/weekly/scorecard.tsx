@@ -43,43 +43,53 @@ export default function WeeklyScorecardScreen() {
 
   async function submit() {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: { session } } = await supabase.auth.getSession()
-    const weekStart = getWeekStart()
-    if (user) {
-      await supabase.from('weekly_scorecards').upsert({ user_id: user.id, week_start: weekStart, ...scores })
-      try {
-        const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/weekly-reflection`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
-          },
-          body: JSON.stringify({ weekStart }),
-        })
-        const data = await res.json()
-        setReflection(data.reflection ?? '')
-        setFocus(data.suggestedShift ?? '')
-      } catch (e) {
-        console.error('Weekly reflection fetch failed:', e)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const weekStart = getWeekStart()
+      if (user) {
+        await supabase.from('weekly_scorecards').upsert({ user_id: user.id, week_start: weekStart, ...scores })
+        try {
+          const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/weekly-reflection`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+            },
+            body: JSON.stringify({ weekStart }),
+          })
+          const data = await res.json()
+          setReflection(data.reflection ?? '')
+          setFocus(data.suggestedShift ?? '')
+        } catch (e) {
+          console.error('Weekly reflection fetch failed:', e)
+        }
       }
+    } catch (e) {
+      console.error('Weekly scorecard submit failed:', e)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   async function saveFocus() {
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await supabase.from('weekly_reflections').update({ next_week_focus: focus })
-        .eq('user_id', user.id).eq('week_start', getWeekStart())
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase.from('weekly_reflections').update({ next_week_focus: focus })
+          .eq('user_id', user.id).eq('week_start', getWeekStart())
+      }
+    } catch (e) {
+      console.error('Save weekly focus failed:', e)
+    } finally {
+      setSaving(false)
+      setFocusSaved(true)
     }
-    setSaving(false)
-    setFocusSaved(true)
   }
 
   return (
-    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
+    <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <View style={[s.header, { borderBottomColor: t.border }]}>
         <Text style={[s.eyebrow, { color: t.amber }]}>Weekly Reset</Text>
         <Text style={[s.title, { color: t.textPrimary }]}>Weekly scorecard</Text>
