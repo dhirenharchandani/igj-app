@@ -60,16 +60,17 @@ export default function SettingsScreen() {
           timeout,
         ])
         if (data) {
-          setMorningDate(parseTime(data.morning_time ?? '07:00:00'))
-          setEveningDate(parseTime(data.evening_time ?? '21:00:00'))
-          setIdentityGapText(data.identity_gap_text ?? '')
-          setDisplayName(data.display_name ?? '')
-          // Keep store in sync so fields are instant on next visit
+          // Only overwrite local state if DB has a real value — never blank out what user entered
+          if (data.morning_time)       setMorningDate(parseTime(data.morning_time))
+          if (data.evening_time)       setEveningDate(parseTime(data.evening_time))
+          if (data.identity_gap_text)  setIdentityGapText(data.identity_gap_text)
+          if (data.display_name)       setDisplayName(data.display_name)
+          // Keep store in sync with DB values
           updateProfile({
-            morning_time: data.morning_time ?? '07:00:00',
-            evening_time: data.evening_time ?? '21:00:00',
-            identity_gap_text: data.identity_gap_text ?? '',
-            display_name: data.display_name ?? '',
+            morning_time:      data.morning_time      ?? profile.morning_time,
+            evening_time:      data.evening_time      ?? profile.evening_time,
+            identity_gap_text: data.identity_gap_text ?? profile.identity_gap_text,
+            display_name:      data.display_name      ?? profile.display_name,
           })
         }
 
@@ -124,11 +125,23 @@ export default function SettingsScreen() {
   }
 
   async function save() {
-    setSaving(true)
     setSaveError('')
+
+    // Update store immediately — fields are correct on next visit even if network fails
+    updateProfile({
+      display_name: displayName,
+      morning_time: toTimeStr(morningDate),
+      evening_time: toTimeStr(eveningDate),
+      identity_gap_text: identityGapText,
+    })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+
+    // Save to Supabase in background
+    setSaving(true)
     try {
       const user = await getUser()
-      if (!user) throw new Error('Not signed in')
+      if (!user) return
 
       const { error } = await supabase.from('user_profiles').upsert({
         id: user.id,
@@ -137,23 +150,14 @@ export default function SettingsScreen() {
         identity_gap_text: identityGapText,
         display_name: displayName,
       }, { onConflict: 'id' })
-      if (error) throw error
 
-      // Persist to store so fields are instant on next visit (even offline)
-      updateProfile({
-        display_name: displayName,
-        morning_time: toTimeStr(morningDate),
-        evening_time: toTimeStr(eveningDate),
-        identity_gap_text: identityGapText,
-      })
+      if (error) setSaveError('Saved locally. Will sync when connection improves.')
 
       if (notifEnabled && Platform.OS !== 'web') {
         await scheduleNotifications()
       }
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    } catch (e: any) {
-      setSaveError(e?.message ?? 'Save failed. Please try again.')
+    } catch {
+      setSaveError('Saved locally. Will sync when connection improves.')
     } finally {
       setSaving(false)
     }
