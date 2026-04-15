@@ -86,7 +86,8 @@ export default function EveningScreen() {
   const t      = useTheme()
   const { markEveningDone, getTodayStatus } = useStore()
   const [morningIntention, setMorningIntention] = useState('')
-  const [morningDone, setMorningDone] = useState(false)
+  // Seed from store — never flash the "answer from memory" banner if morning is already done
+  const [morningDone, setMorningDone] = useState(() => getTodayStatus().morningDone)
   const [form, setForm] = useState<Form>({ q1: '', q2: '', q3: '', q4: '', q5: '' })
   const [saving, setSaving] = useState(false)
   // Seed from store immediately — if evening is done, show recap without waiting for DB
@@ -98,6 +99,8 @@ export default function EveningScreen() {
   // Re-runs every time the screen gains focus.
   useFocusEffect(useCallback(() => {
     isMountedRef.current = true
+    // Re-seed morning status from store on every focus
+    if (getTodayStatus().morningDone) setMorningDone(true)
     // Re-seed from store on every focus — if done, also restore cached answers instantly
     if (getTodayStatus().eveningDone) {
       setSaved(true)
