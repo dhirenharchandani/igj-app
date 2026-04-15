@@ -24,7 +24,7 @@ export default function ScorecardScreen() {
   const t       = useTheme()
   const { markScorecardDone } = useStore()
   const [scores, setScores] = useState<Record<string, number>>({ awareness: 0, intention: 0, state: 0, presence: 0, ownership: 0 })
-  const [loading, setLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
   const [insight, setInsight] = useState('')
   const [lowestDim, setLowestDim] = useState('')
   const [saved, setSaved] = useState(false)
@@ -63,44 +63,33 @@ export default function ScorecardScreen() {
   const total    = Object.values(scores).reduce((a, b) => a + b, 0)
   const allRated = Object.values(scores).every(v => v > 0)
 
-  async function submit() {
-    setLoading(true)
-    // Mark done immediately — never block on network
+  // Fully synchronous — zero awaits, zero blocking
+  function submit() {
     markScorecardDone()
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const user = session?.user ?? null
+    setSubmitted(true)
+
+    // Save to Supabase in background — pure fire and forget
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user
+      if (!user) return
       const today = new Date().toISOString().split('T')[0]
-      if (user) {
-        // Save scorecard (fast)
-        await supabase.from('daily_scorecards').upsert(
-          { user_id: user.id, date: today, ...scores },
-          { onConflict: 'user_id,date' }
-        )
-        // Fetch AI insight with hard 5s timeout using Promise.race
-        try {
-          const insightTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000))
-          const insightFetch = fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/insight`, {
+      supabase.from('daily_scorecards')
+        .upsert({ user_id: user.id, date: today, ...scores }, { onConflict: 'user_id,date' })
+        .then(() => {
+          // Try AI insight after save — 4s max, completely optional
+          const apiUrl = process.env.EXPO_PUBLIC_API_URL
+          if (!apiUrl || apiUrl.includes('192.168')) return // skip if local/undeployed
+          const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 4000))
+          const req = fetch(`${apiUrl}/api/insight`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ date: today }),
           }).then(r => r.json()).catch(() => null)
-
-          const result = await Promise.race([insightFetch, insightTimeout])
-          if (result?.insight) setInsight(result.insight)
-          if (result?.lowestDimension) setLowestDim(result.lowestDimension)
-        } catch {
-          // API unreachable — scorecard still saved, insight skipped
-        }
-      }
-    } catch (e) {
-      console.error('Scorecard submit failed:', e)
-    } finally {
-      setLoading(false)
-    }
+          Promise.race([req, timeout]).then(result => {
+            if (result?.insight) { setInsight(result.insight); setLowestDim(result.lowestDimension ?? '') }
+          }).catch(() => {})
+        }).catch(() => {})
+    }).catch(() => {})
   }
 
   async function saveInsight() {
@@ -143,7 +132,7 @@ export default function ScorecardScreen() {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll}>
-        {!insight ? (
+        {!submitted ? (
           <>
             <Text style={[s.title, { color: t.textPrimary }]}>Daily scorecard</Text>
             <Text style={[s.sub, { color: t.textSecondary }]}>Rate each dimension honestly. This feeds your pattern data.</Text>
@@ -177,7 +166,7 @@ export default function ScorecardScreen() {
               <Text style={[s.totalVal, { color: t.textPrimary }]}>{total} / 25</Text>
             </View>
 
-            <Btn label={loading ? 'Reading your day…' : "See today's pattern →"} onPress={submit} variant="blue" disabled={!allRated || loading} loading={loading} />
+            <Btn label="See today's pattern →" onPress={submit} variant="blue" disabled={!allRated} />
           </>
         ) : (
           <>
