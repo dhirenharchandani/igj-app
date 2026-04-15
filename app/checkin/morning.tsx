@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Haptics from 'expo-haptics'
 import { useTheme } from '../../src/ThemeContext'
 import { useStore } from '../../src/lib/store'
-import { supabase } from '../../src/lib/supabase'
+import { supabase, getUser } from '../../src/lib/supabase'
 import { updateStreak } from '../../src/lib/utils/streak'
 import { BottomNav } from '../../src/components/BottomNav'
 import { Input } from '../../src/components/ui/Input'
@@ -82,7 +82,7 @@ export default function MorningScreen() {
   useFocusEffect(useCallback(() => {
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const user = await getUser()
         if (!user) { setSaved(false); return }
         const today = new Date().toISOString().split('T')[0]
         const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
@@ -174,7 +174,7 @@ export default function MorningScreen() {
     // Save in background — won't block navigation
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       const today = new Date().toISOString().split('T')[0]
       if (user) {
         await supabase.from('morning_checkins').upsert({
@@ -196,7 +196,7 @@ export default function MorningScreen() {
 
   async function saveRecovery() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
       if (user && recoveryNote.trim()) {
         await supabase.from('morning_checkins').upsert({

@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } fr
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase } from '../../src/lib/supabase'
+import { supabase, getUser } from '../../src/lib/supabase'
 import { Input } from '../../src/components/ui/Input'
 import { Btn } from '../../src/components/ui/Btn'
 import { Chip } from '../../src/components/ui/Chip'
@@ -42,7 +42,7 @@ export default function FirstCheckinScreen() {
     // Save in background — fire-and-forget
     ;(async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const user = await getUser()
         if (user) {
           const today = new Date().toISOString().split('T')[0]
           supabase.from('morning_checkins').upsert({

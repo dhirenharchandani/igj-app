@@ -13,3 +13,9 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     detectSessionInUrl: false,
   },
 })
+
+// Use cached session — no network round-trip needed just to get user ID
+export async function getUser() {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.user ?? null
+}

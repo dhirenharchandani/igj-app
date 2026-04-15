@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Notifications from 'expo-notifications'
 import { useTheme } from '../src/ThemeContext'
 import { useStore } from '../src/lib/store'
-import { supabase } from '../src/lib/supabase'
+import { supabase, getUser } from '../src/lib/supabase'
 import { BottomNav } from '../src/components/BottomNav'
 import { Input } from '../src/components/ui/Input'
 
@@ -45,7 +45,7 @@ export default function SettingsScreen() {
   useFocusEffect(useCallback(() => {
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const user = await getUser()
         if (!user) return
 
         const timeout = new Promise<{ data: null }>((resolve) =>
@@ -127,7 +127,7 @@ export default function SettingsScreen() {
     setSaving(true)
     setSaveError('')
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       if (!user) throw new Error('Not signed in')
 
       const { error } = await supabase.from('user_profiles').upsert({

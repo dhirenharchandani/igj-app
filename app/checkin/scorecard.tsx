@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase } from '../../src/lib/supabase'
+import { supabase, getUser } from '../../src/lib/supabase'
 import { useStore } from '../../src/lib/store'
 import { DAILY_DIMENSIONS } from '../../src/lib/utils/pillars'
 import { BottomNav } from '../../src/components/BottomNav'
@@ -35,7 +35,7 @@ export default function ScorecardScreen() {
     setLoadingData(true)
     async function loadMorning() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const user = await getUser()
         if (!user) { return }
         const today = new Date().toISOString().split('T')[0]
         const timeout = new Promise<{ data: null }>((resolve) =>
@@ -66,7 +66,7 @@ export default function ScorecardScreen() {
   async function submit() {
     setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       const { data: { session } } = await supabase.auth.getSession()
       const today = new Date().toISOString().split('T')[0]
       if (user) {
@@ -98,7 +98,7 @@ export default function ScorecardScreen() {
 
   async function saveInsight() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       const today = new Date().toISOString().split('T')[0]
       if (user) {
         await supabase.from('daily_insights').update({ is_saved: true }).eq('user_id', user.id).eq('date', today)

@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } fr
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase } from '../../src/lib/supabase'
+import { supabase, getUser } from '../../src/lib/supabase'
 import { WEEKLY_DIMENSIONS } from '../../src/lib/utils/pillars'
 import { getWeekStart } from '../../src/lib/utils/scoring'
 import { BottomNav } from '../../src/components/BottomNav'
@@ -44,7 +44,7 @@ export default function WeeklyScorecardScreen() {
   async function submit() {
     setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       const { data: { session } } = await supabase.auth.getSession()
       const weekStart = getWeekStart()
       if (user) {
@@ -75,7 +75,7 @@ export default function WeeklyScorecardScreen() {
   async function saveFocus() {
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       if (user) {
         await supabase.from('weekly_reflections').update({ next_week_focus: focus })
           .eq('user_id', user.id).eq('week_start', getWeekStart())

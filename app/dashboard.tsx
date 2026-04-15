@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../src/ThemeContext'
-import { supabase } from '../src/lib/supabase'
+import { supabase, getUser } from '../src/lib/supabase'
 import { useStore } from '../src/lib/store'
 import { BottomNav } from '../src/components/BottomNav'
 import { Card } from '../src/components/ui/Card'
@@ -105,7 +105,7 @@ export default function DashboardScreen() {
 
     async function load() {
       try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       if (!user) { setState(s => ({ ...s, loading: false })); return }
 
       const today     = new Date().toISOString().split('T')[0]

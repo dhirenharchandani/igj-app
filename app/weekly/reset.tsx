@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingV
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase } from '../../src/lib/supabase'
+import { supabase, getUser } from '../../src/lib/supabase'
 import { getWeekStart } from '../../src/lib/utils/scoring'
 import { Input } from '../../src/components/ui/Input'
 import { Btn } from '../../src/components/ui/Btn'
@@ -67,7 +67,7 @@ export default function WeeklyResetScreen() {
   async function finish() {
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       if (user) {
         await supabase.from('weekly_resets').upsert({ user_id: user.id, week_start: getWeekStart(), ...data })
       }

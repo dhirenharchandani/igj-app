@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase } from '../../src/lib/supabase'
+import { supabase, getUser } from '../../src/lib/supabase'
 import { getWeekStart } from '../../src/lib/utils/scoring'
 import { BottomNav } from '../../src/components/BottomNav'
 import { Card } from '../../src/components/ui/Card'
@@ -23,7 +23,7 @@ export default function DataBridgeScreen() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const user = await getUser()
         if (!user) return
 
         // Check unlock status — fetch all check-in dates (morning + evening)

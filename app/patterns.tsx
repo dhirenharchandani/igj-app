@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme } from '../src/ThemeContext'
-import { supabase } from '../src/lib/supabase'
+import { supabase, getUser } from '../src/lib/supabase'
 import { DAILY_DIMENSIONS, WEEKLY_DIMENSIONS } from '../src/lib/utils/pillars'
 import { getScoreColor } from '../src/lib/utils/scoring'
 import { BottomNav } from '../src/components/BottomNav'
@@ -42,7 +42,7 @@ export default function PatternsScreen() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const user = await getUser()
         if (!user) return
         const thirtyDaysAgo  = new Date(Date.now() - 30  * 86400000).toISOString().split('T')[0]
         const ninetyDaysAgo  = new Date(Date.now() - 90  * 86400000).toISOString().split('T')[0]

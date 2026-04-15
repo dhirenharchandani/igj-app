@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../src/ThemeContext'
-import { supabase } from '../src/lib/supabase'
+import { supabase, getUser } from '../src/lib/supabase'
 import { useStore } from '../src/lib/store'
 import { Btn } from '../src/components/ui/Btn'
 import { ProgressBar } from '../src/components/ui/ProgressBar'
@@ -47,7 +47,7 @@ export default function AssessmentScreen() {
 
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const user = await getUser()
         if (!user) { setLoading(false); return }
 
         const timeout = new Promise<{ data: null }>((resolve) =>
@@ -90,7 +90,7 @@ export default function AssessmentScreen() {
   async function save() {
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       if (user) {
         await supabase.from('life_assessments').insert({ user_id: user.id, ...scores })
       }

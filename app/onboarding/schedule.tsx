@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase } from '../../src/lib/supabase'
+import { supabase, getUser } from '../../src/lib/supabase'
 import { Btn } from '../../src/components/ui/Btn'
 
 const MORNING_TIMES = ['05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00']
@@ -28,7 +28,7 @@ export default function ScheduleScreen() {
     router.replace('/assessment')
     // Fire-and-forget save in background
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       if (user) {
         supabase.from('user_profiles').upsert({
           id: user.id, morning_time: morningTime + ':00',

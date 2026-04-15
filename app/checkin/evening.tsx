@@ -6,7 +6,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Haptics from 'expo-haptics'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase } from '../../src/lib/supabase'
+import { supabase, getUser } from '../../src/lib/supabase'
 import { useStore } from '../../src/lib/store'
 import { BottomNav } from '../../src/components/BottomNav'
 import { Input } from '../../src/components/ui/Input'
@@ -98,7 +98,7 @@ export default function EveningScreen() {
   useFocusEffect(useCallback(() => {
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const user = await getUser()
         if (!user) { setSaved(false); return }
         const today = new Date().toISOString().split('T')[0]
 
@@ -174,7 +174,7 @@ export default function EveningScreen() {
     // Save in background — won't block navigation
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getUser()
       const today = new Date().toISOString().split('T')[0]
       if (user) {
         await supabase.from('evening_checkins').upsert({

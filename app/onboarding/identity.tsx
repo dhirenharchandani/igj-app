@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingV
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase } from '../../src/lib/supabase'
+import { supabase, getUser } from '../../src/lib/supabase'
 import { Input } from '../../src/components/ui/Input'
 import { Btn } from '../../src/components/ui/Btn'
 import { Chip } from '../../src/components/ui/Chip'
@@ -55,7 +55,7 @@ export default function IdentityScreen() {
   async function saveAndContinue() {
     // Navigate immediately — save in background so there's no wait
     setStep(4)
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getUser()
     if (user) {
       supabase.from('user_profiles').upsert({
         id: user.id,
