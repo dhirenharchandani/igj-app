@@ -30,6 +30,7 @@ export interface OnboardingState {
   intro_completed: boolean
   pillars_viewed: boolean
   assessment_completed: boolean
+  onboarding_done: boolean          // set after schedule screen completes
   assessment_scores: AssessmentScores
 }
 
@@ -46,12 +47,14 @@ interface Store {
   setTheme: (theme: Theme) => void
   updateProfile: (data: Partial<UserProfile>) => void
   markAssessmentDone: () => void
+  markOnboardingDone: () => void
   // Today's check-in status — updated immediately on save, no async
   todayStatus: TodayStatus
   markMorningDone: () => void
   markEveningDone: () => void
   markScorecardDone: () => void
   getTodayStatus: () => TodayStatus
+  resetForSignOut: () => void       // call on sign-out to clear per-user state
 }
 
 export const useStore = create<Store>()(
@@ -61,6 +64,7 @@ export const useStore = create<Store>()(
         intro_completed: false,
         pillars_viewed: false,
         assessment_completed: false,
+        onboarding_done: false,
         assessment_scores: {
           body_energy: 0, mind_dialogue: 0, intimacy: 0, family: 0,
           circle: 0, purpose: 0, experiences: 0,
@@ -81,6 +85,8 @@ export const useStore = create<Store>()(
         set((s) => ({ profile: { ...s.profile, ...data } })),
       markAssessmentDone: () =>
         set((s) => ({ onboarding: { ...s.onboarding, assessment_completed: true } })),
+      markOnboardingDone: () =>
+        set((s) => ({ onboarding: { ...s.onboarding, onboarding_done: true } })),
 
       todayStatus: { date: '', morningDone: false, eveningDone: false, scorecardDone: false },
 
@@ -119,6 +125,21 @@ export const useStore = create<Store>()(
           return { todayStatus: { ...base, scorecardDone: true } }
         })
       },
+
+      // Call on sign-out — clears all per-user state so next login starts clean
+      resetForSignOut: () =>
+        set({
+          todayStatus: { date: '', morningDone: false, eveningDone: false, scorecardDone: false },
+          onboarding: {
+            intro_completed: false, pillars_viewed: false,
+            assessment_completed: false, onboarding_done: false,
+            assessment_scores: {
+              body_energy: 0, mind_dialogue: 0, intimacy: 0, family: 0,
+              circle: 0, purpose: 0, experiences: 0,
+              alignment: 0, wealth: 0, growth: 0,
+            },
+          },
+        }),
     }),
     {
       name: 'inner-game-journal',

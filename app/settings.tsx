@@ -17,7 +17,7 @@ const NOTIF_KEY = 'igj_notifications_enabled'
 export default function SettingsScreen() {
   const router  = useRouter()
   const t       = useTheme()
-  const { profile, setTheme, updateProfile } = useStore()
+  const { profile, setTheme, updateProfile, resetForSignOut } = useStore()
   const isDark  = profile.theme === 'dark'
 
   // Seed time pickers from store so values show immediately on every visit
@@ -172,6 +172,7 @@ export default function SettingsScreen() {
   }
 
   async function signOut() {
+    resetForSignOut()   // clear all per-user store state before navigating away
     try {
       await supabase.auth.signOut()
     } catch {

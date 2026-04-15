@@ -21,7 +21,13 @@ function RootNavigator() {
       if (event === 'INITIAL_SESSION') {
         if (session && !didRestoreSession.current) {
           didRestoreSession.current = true
-          // Returning user — route based on onboarding status
+          // Check store first (instant, no network) — DB is authoritative but store is the fallback
+          const storeOnboardingDone = useStore.getState().onboarding.onboarding_done
+          if (storeOnboardingDone) {
+            router.replace('/dashboard')
+            return
+          }
+          // Store doesn't know — check DB
           try {
             const { data: profile } = await supabase
               .from('user_profiles').select('onboarding_done').eq('id', session.user.id).maybeSingle()

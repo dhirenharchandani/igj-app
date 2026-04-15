@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase, getUser } from '../../src/lib/supabase'
+import { supabase } from '../../src/lib/supabase'
+import { useStore } from '../../src/lib/store'
 import { Btn } from '../../src/components/ui/Btn'
 
 const MORNING_TIMES = ['05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00']
@@ -19,28 +20,24 @@ function fmt(t: string) {
 export default function ScheduleScreen() {
   const router = useRouter()
   const t      = useTheme()
+  const { markOnboardingDone, updateProfile } = useStore()
   const [morningTime, setMorningTime] = useState('07:00')
   const [eveningTime, setEveningTime] = useState('21:00')
-  const [saving, setSaving] = useState(false)
 
-  async function save() {
-    setSaving(true)
-    // Navigate immediately — don't block on network
+  function save() {
+    // Mark done in store immediately — _layout.tsx checks this as fallback
+    markOnboardingDone()
+    updateProfile({ morning_time: morningTime + ':00', evening_time: eveningTime + ':00' })
     router.replace('/assessment')
-    // Fire-and-forget save in background
-    try {
-      const user = await getUser()
-      if (user) {
-        supabase.from('user_profiles').upsert({
-          id: user.id, morning_time: morningTime + ':00',
-          evening_time: eveningTime + ':00', onboarding_done: true,
-        }, { onConflict: 'id' }).then(() => {}).catch((e) => console.warn('Schedule save failed:', e))
-      }
-    } catch (e) {
-      console.warn('Schedule save failed:', e)
-    } finally {
-      setSaving(false)
-    }
+    // Persist to DB in background
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user
+      if (!user) return
+      supabase.from('user_profiles').upsert({
+        id: user.id, morning_time: morningTime + ':00',
+        evening_time: eveningTime + ':00', onboarding_done: true,
+      }, { onConflict: 'id' }).then(() => {}).catch(() => {})
+    }).catch(() => {})
   }
 
   return (
@@ -107,7 +104,7 @@ export default function ScheduleScreen() {
           </Text>
         </View>
 
-        <Btn label={saving ? 'Saving…' : 'Set my schedule →'} onPress={save} variant="purple" loading={saving} />
+        <Btn label="Set my schedule →" onPress={save} variant="purple" />
       </ScrollView>
     </SafeAreaView>
   )
