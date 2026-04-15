@@ -137,6 +137,9 @@ export default function EveningScreen() {
           })
           setSaved(true)
         } else {
+          // No DB data — if store says done, trust the store
+          if (getTodayStatus().eveningDone) return
+
           // No Supabase data — check for a local draft
           const draftKey = `igj_evening_draft_${today}`
           const raw = await AsyncStorage.getItem(draftKey)
@@ -155,7 +158,8 @@ export default function EveningScreen() {
           }
         }
       } catch {
-        if (isMountedRef.current) setSaved(false)
+        // DB error — never reset to false if store says done
+        if (isMountedRef.current && !getTodayStatus().eveningDone) setSaved(false)
       }
     }
     load()

@@ -131,6 +131,11 @@ export default function MorningScreen() {
           })
           setSaved(true)
         } else {
+          // No DB data — but if store says done, trust the store (fire-and-forget save may still be in flight)
+          if (getTodayStatus().morningDone) {
+            // Keep saved=true; recap shows "Your responses are saved" placeholder until next load
+            return
+          }
           // No data for today — check AsyncStorage for a draft
           const draftKey = `igj_morning_draft_${today}`
           try {
@@ -149,7 +154,8 @@ export default function MorningScreen() {
           if (isMountedRef.current) setSaved(false)
         }
       } catch {
-        if (isMountedRef.current) setSaved(false)
+        // DB error — never reset to false if store says done
+        if (isMountedRef.current && !getTodayStatus().morningDone) setSaved(false)
       }
     }
     load()
