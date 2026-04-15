@@ -82,8 +82,14 @@ export default function MorningScreen() {
   // Always checks Supabase first — so on a new day, no data is found → fresh form automatically.
   useFocusEffect(useCallback(() => {
     isMountedRef.current = true
-    // Re-seed from store on every focus (handles returning to screen same day)
-    if (getTodayStatus().morningDone) setSaved(true)
+    // Re-seed from store on every focus — if done, also restore cached answers instantly
+    if (getTodayStatus().morningDone) {
+      setSaved(true)
+      const today = new Date().toISOString().split('T')[0]
+      AsyncStorage.getItem(`igj_morning_recap_${today}`)
+        .then(cached => { if (cached && isMountedRef.current) setForm(JSON.parse(cached)) })
+        .catch(() => {})
+    }
 
     async function load() {
       try {
@@ -131,9 +137,12 @@ export default function MorningScreen() {
           })
           setSaved(true)
         } else {
-          // No DB data — but if store says done, trust the store (fire-and-forget save may still be in flight)
+          // No DB data — if store says done, load answers from local cache (instant, no network)
           if (getTodayStatus().morningDone) {
-            // Keep saved=true; recap shows "Your responses are saved" placeholder until next load
+            try {
+              const cached = await AsyncStorage.getItem(`igj_morning_recap_${today}`)
+              if (cached && isMountedRef.current) setForm(JSON.parse(cached))
+            } catch { /* ignore */ }
             return
           }
           // No data for today — check AsyncStorage for a draft
@@ -182,6 +191,10 @@ export default function MorningScreen() {
   }
 
   async function save() {
+    // Cache answers locally so recap loads instantly on return visits
+    const today = new Date().toISOString().split('T')[0]
+    AsyncStorage.setItem(`igj_morning_recap_${today}`, JSON.stringify(form)).catch(() => {})
+
     // Optimistically update UI immediately — don't block on network
     markMorningDone()
     setSaved(true)

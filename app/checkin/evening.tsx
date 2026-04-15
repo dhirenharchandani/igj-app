@@ -98,8 +98,14 @@ export default function EveningScreen() {
   // Re-runs every time the screen gains focus.
   useFocusEffect(useCallback(() => {
     isMountedRef.current = true
-    // Re-seed from store on every focus (handles returning to screen same day)
-    if (getTodayStatus().eveningDone) setSaved(true)
+    // Re-seed from store on every focus — if done, also restore cached answers instantly
+    if (getTodayStatus().eveningDone) {
+      setSaved(true)
+      const today = new Date().toISOString().split('T')[0]
+      AsyncStorage.getItem(`igj_evening_recap_${today}`)
+        .then(cached => { if (cached && isMountedRef.current) setForm(JSON.parse(cached)) })
+        .catch(() => {})
+    }
 
     async function load() {
       try {
@@ -137,8 +143,14 @@ export default function EveningScreen() {
           })
           setSaved(true)
         } else {
-          // No DB data — if store says done, trust the store
-          if (getTodayStatus().eveningDone) return
+          // No DB data — if store says done, load answers from local cache (instant, no network)
+          if (getTodayStatus().eveningDone) {
+            try {
+              const cached = await AsyncStorage.getItem(`igj_evening_recap_${today}`)
+              if (cached && isMountedRef.current) setForm(JSON.parse(cached))
+            } catch { /* ignore */ }
+            return
+          }
 
           // No Supabase data — check for a local draft
           const draftKey = `igj_evening_draft_${today}`
@@ -184,6 +196,10 @@ export default function EveningScreen() {
   }
 
   async function save() {
+    // Cache answers locally so recap loads instantly on return visits
+    const today = new Date().toISOString().split('T')[0]
+    AsyncStorage.setItem(`igj_evening_recap_${today}`, JSON.stringify(form)).catch(() => {})
+
     // Optimistically update UI immediately — don't block on network
     markEveningDone()
     setSaved(true)  // Show completion screen — user taps "Score the day" to continue
