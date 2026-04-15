@@ -88,7 +88,7 @@ export default function DashboardScreen() {
       weeklyResetDone: false,
       weeklyUnlocked: false,
       assessmentDone: onboarding.assessment_completed,
-      eveningTime: '21:00',
+      eveningTime: (profile.evening_time ?? '21:00:00').slice(0, 5),
       loading: false,
       reassessmentDue: false,
       daysSinceAssessment: 0,
@@ -98,7 +98,7 @@ export default function DashboardScreen() {
   const isMountedRef = useRef(true)
   useFocusEffect(useCallback(() => {
     isMountedRef.current = true
-    // Re-seed from store on every focus (handles case where user just completed a check-in)
+    // Re-seed from store on every focus (handles check-in completions + settings changes)
     const stored = getTodayStatus()
     setState(prev => ({
       ...prev,
@@ -106,6 +106,7 @@ export default function DashboardScreen() {
       eveningDone: stored.eveningDone,
       scorecardDone: stored.scorecardDone,
       weeklyResetDone: false,
+      eveningTime: (profile.evening_time ?? '21:00:00').slice(0, 5),
     }))
 
     async function load() {
@@ -207,7 +208,7 @@ export default function DashboardScreen() {
         totalDays: streakData.total,
         weeklyUnlocked,
         lowestDim, gapText: supaProfile?.identity_gap_text ?? '',
-        eveningTime: (supaProfile?.evening_time ?? '21:00:00').slice(0, 5),
+        eveningTime: (supaProfile?.evening_time ?? profile.evening_time ?? '21:00:00').slice(0, 5),
         todayScore: todayScoreVal, recentEntries, recentScorecards: (recentScorecards ?? []) as ScorecardRow[],
         insightText: insight?.insight_text ?? '',
         milestoneShown: showMilestone,
