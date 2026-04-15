@@ -77,25 +77,23 @@ export default function ScorecardScreen() {
           { user_id: user.id, date: today, ...scores },
           { onConflict: 'user_id,date' }
         )
-        // Fetch AI insight — 5 second timeout so it never hangs indefinitely
+        // Fetch AI insight with hard 5s timeout using Promise.race
         try {
-          const controller = new AbortController()
-          const insightTimeout = setTimeout(() => controller.abort(), 5000)
-          const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/insight`, {
+          const insightTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000))
+          const insightFetch = fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/insight`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
             },
             body: JSON.stringify({ date: today }),
-            signal: controller.signal,
-          })
-          clearTimeout(insightTimeout)
-          const data = await res.json()
-          setInsight(data.insight ?? '')
-          setLowestDim(data.lowestDimension ?? '')
+          }).then(r => r.json()).catch(() => null)
+
+          const result = await Promise.race([insightFetch, insightTimeout])
+          if (result?.insight) setInsight(result.insight)
+          if (result?.lowestDimension) setLowestDim(result.lowestDimension)
         } catch {
-          // API unreachable or timed out — scorecard is still saved, just no AI insight
+          // API unreachable — scorecard still saved, insight skipped
         }
       }
     } catch (e) {
