@@ -42,6 +42,14 @@ export default function SettingsScreen() {
   const [identityGapText, setIdentityGapText] = useState(profile.identity_gap_text || '')
   const [displayName, setDisplayName]         = useState(profile.display_name || '')
 
+  // Sync local state when store rehydrates from AsyncStorage (async on app start)
+  useEffect(() => {
+    if (profile.display_name)       setDisplayName(profile.display_name)
+    if (profile.identity_gap_text)  setIdentityGapText(profile.identity_gap_text)
+    if (profile.morning_time)       setMorningDate(parseTime(profile.morning_time))
+    if (profile.evening_time)       setEveningDate(parseTime(profile.evening_time))
+  }, [profile.display_name, profile.identity_gap_text, profile.morning_time, profile.evening_time])
+
   useFocusEffect(useCallback(() => {
     async function load() {
       try {
