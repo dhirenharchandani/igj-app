@@ -64,11 +64,11 @@ function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips }: 
 export default function MorningScreen() {
   const router = useRouter()
   const t = useTheme()
-  const { markMorningDone } = useStore()
+  const { markMorningDone, getTodayStatus } = useStore()
   const [form, setForm] = useState<Form>({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
   const [saving, setSaving] = useState(false)
-  // Start false — render form immediately, background load updates to true if already done
-  const [saved, setSaved] = useState<boolean | null>(false)
+  // Seed from store immediately — if morning is done, show recap without waiting for DB
+  const [saved, setSaved] = useState<boolean | null>(() => getTodayStatus().morningDone)
   const [eveningTime, setEveningTime] = useState('')
   const [yesterdayWin, setYesterdayWin] = useState('')
   const [yesterdayMissed, setYesterdayMissed]   = useState(false)
@@ -80,6 +80,9 @@ export default function MorningScreen() {
   // Re-runs every time the screen gains focus.
   // Always checks Supabase first — so on a new day, no data is found → fresh form automatically.
   useFocusEffect(useCallback(() => {
+    // Re-seed from store on every focus (handles returning to screen same day)
+    if (getTodayStatus().morningDone) setSaved(true)
+
     async function load() {
       try {
         const user = await getUser()

@@ -84,18 +84,21 @@ function QuestionBlock({ label, sub, value, onChangeText, placeholder, chips, on
 export default function EveningScreen() {
   const router = useRouter()
   const t      = useTheme()
-  const { markEveningDone } = useStore()
+  const { markEveningDone, getTodayStatus } = useStore()
   const [morningIntention, setMorningIntention] = useState('')
   const [morningDone, setMorningDone] = useState(false)
   const [form, setForm] = useState<Form>({ q1: '', q2: '', q3: '', q4: '', q5: '' })
   const [saving, setSaving] = useState(false)
-  // Start false — render form immediately, background load updates to true if already done
-  const [saved, setSaved] = useState<boolean | null>(false)
+  // Seed from store immediately — if evening is done, show recap without waiting for DB
+  const [saved, setSaved] = useState<boolean | null>(() => getTodayStatus().eveningDone)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [quickMode, setQuickMode] = useState(false)
 
   // Re-runs every time the screen gains focus.
   useFocusEffect(useCallback(() => {
+    // Re-seed from store on every focus (handles returning to screen same day)
+    if (getTodayStatus().eveningDone) setSaved(true)
+
     async function load() {
       try {
         const user = await getUser()
