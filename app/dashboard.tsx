@@ -11,6 +11,7 @@ import { Card } from '../src/components/ui/Card'
 import { Btn } from '../src/components/ui/Btn'
 import { getWeekStart, isSunday } from '../src/lib/utils/scoring'
 import { getRecommendedChapter } from '../src/lib/utils/pillars'
+import { BETA_MODE } from '../src/lib/config'
 
 interface RecentEntry { date: string; total: number | null; morningDone: boolean; eveningDone: boolean }
 
@@ -169,7 +170,7 @@ export default function DashboardScreen() {
       const daysSinceFirst = firstDate
         ? Math.floor((Date.now() - new Date(firstDate + 'T12:00:00').getTime()) / 86400000)
         : 0
-      const weeklyUnlocked = allMorningDates.length >= 7 || daysSinceFirst >= 7
+      const weeklyUnlocked = BETA_MODE || allMorningDates.length >= 7 || daysSinceFirst >= 7
 
       // Recent entries
       const morningDates = new Set(allMorningDates.slice(0, 7))
@@ -502,8 +503,8 @@ export default function DashboardScreen() {
           )}
         </View>
 
-        {/* Sunday weekly reset banner — only after 7 days */}
-        {sunday && !state.weeklyResetDone && state.weeklyUnlocked && (
+        {/* Weekly reset banner — Sundays only in production, every day in beta */}
+        {(BETA_MODE || sunday) && !state.weeklyResetDone && state.weeklyUnlocked && (
           <View style={[s.sundayBanner, { backgroundColor: t.amberDim, borderColor: t.amberBorder }]}>
             <Text style={[s.sundayTitle, { color: t.textPrimary }]}>📅 Sunday — Weekly Reset</Text>
             <Text style={[s.sundaySub, { color: t.textSecondary }]}>Review the week. Find the pattern. Set the standard.</Text>
@@ -587,7 +588,7 @@ export default function DashboardScreen() {
         ) : null}
 
         {/* Recommended chapter */}
-        {state.totalDays >= 3 && state.lowestDim ? (
+        {(BETA_MODE || state.totalDays >= 3) && state.lowestDim ? (
           <Card style={{ marginBottom: 20 }}>
             <Text style={[s.recLabel, { color: t.textTertiary }]}>Recommended for you</Text>
             <Text style={[s.recTitle, { color: t.textPrimary }]}>Ch.{recommended.chapter} — {recommended.title}</Text>
@@ -612,30 +613,30 @@ export default function DashboardScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Patterns — unlocks at 3 days */}
+          {/* Patterns — unlocks at 3 days (bypassed in BETA_MODE) */}
           <TouchableOpacity
-            onPress={() => state.totalDays >= 3 ? router.push('/patterns' as any) : null}
-            activeOpacity={state.totalDays >= 3 ? 0.8 : 1}
+            onPress={() => (BETA_MODE || state.totalDays >= 3) ? router.push('/patterns' as any) : null}
+            activeOpacity={(BETA_MODE || state.totalDays >= 3) ? 0.8 : 1}
             style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
             <Text style={[s.tileText, { color: t.textPrimary }]}>
-              {state.totalDays >= 3 ? '📊 Patterns' : '🔒 Patterns'}
+              {(BETA_MODE || state.totalDays >= 3) ? '📊 Patterns' : '🔒 Patterns'}
             </Text>
-            {state.totalDays < 3 && (
+            {!BETA_MODE && state.totalDays < 3 && (
               <Text style={[s.tileSub, { color: t.textSecondary }]}>
                 {Math.max(0, 3 - state.totalDays)} day{Math.max(0, 3 - state.totalDays) !== 1 ? 's' : ''} to unlock
               </Text>
             )}
           </TouchableOpacity>
 
-          {/* Weekly Reset — unlocks at 7 days */}
+          {/* Weekly Reset — unlocks at 7 days (bypassed in BETA_MODE) */}
           <TouchableOpacity
-            onPress={() => state.weeklyUnlocked ? router.push('/weekly/data-bridge') : null}
-            activeOpacity={state.weeklyUnlocked ? 0.8 : 1}
+            onPress={() => (BETA_MODE || state.weeklyUnlocked) ? router.push('/weekly/data-bridge') : null}
+            activeOpacity={(BETA_MODE || state.weeklyUnlocked) ? 0.8 : 1}
             style={[s.tile, { backgroundColor: t.bg3, borderColor: t.border }]}>
             <Text style={[s.tileText, { color: t.textPrimary }]}>
-              {state.weeklyUnlocked ? '🔁 Weekly Reset' : '🔒 Weekly Reset'}
+              {(BETA_MODE || state.weeklyUnlocked) ? '🔁 Weekly Reset' : '🔒 Weekly Reset'}
             </Text>
-            {!state.weeklyUnlocked && (
+            {!BETA_MODE && !state.weeklyUnlocked && (
               <Text style={[s.tileSub, { color: t.textSecondary }]}>
                 {Math.max(0, 7 - state.totalDays)} day{Math.max(0, 7 - state.totalDays) !== 1 ? 's' : ''} to unlock
               </Text>

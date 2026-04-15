@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme } from '../src/ThemeContext'
 import { supabase, getUser } from '../src/lib/supabase'
+import { BETA_MODE } from '../src/lib/config'
 import { DAILY_DIMENSIONS, WEEKLY_DIMENSIONS } from '../src/lib/utils/pillars'
 import { getScoreColor } from '../src/lib/utils/scoring'
 import { BottomNav } from '../src/components/BottomNav'
@@ -128,7 +129,7 @@ export default function PatternsScreen() {
     </SafeAreaView>
   )
 
-  if (dayCount < 3) return (
+  if (!BETA_MODE && dayCount < 3) return (
     <SafeAreaView style={[{ flex: 1, backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <View style={[{ borderBottomWidth: 1, padding: 20, paddingBottom: 16, borderBottomColor: t.border }]}>
         <Text style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 4, color: t.teal }}>Your patterns</Text>
@@ -218,7 +219,7 @@ export default function PatternsScreen() {
         <Text style={[s.title, { color: t.textPrimary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>Your data. What it's actually showing you.</Text>
       </View>
 
-      {dayCount >= 3 && dayCount < 14 && (
+      {!BETA_MODE && dayCount >= 3 && dayCount < 14 && (
         <View style={[{ marginHorizontal: 20, marginTop: 12, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: t.amberBorder, backgroundColor: t.amberDim }]}>
           <Text style={[{ fontSize: 12, lineHeight: 18, color: t.amber }]}>
             📈 Your patterns are still forming. Keep checking in daily — the data gets meaningfully richer after 2 weeks.

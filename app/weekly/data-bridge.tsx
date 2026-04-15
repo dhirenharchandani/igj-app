@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router'
 import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../../src/ThemeContext'
 import { supabase, getUser } from '../../src/lib/supabase'
+import { BETA_MODE } from '../../src/lib/config'
 import { getWeekStart } from '../../src/lib/utils/scoring'
 import { BottomNav } from '../../src/components/BottomNav'
 import { Card } from '../../src/components/ui/Card'
@@ -19,7 +20,7 @@ export default function DataBridgeScreen() {
   const [loading, setLoading] = useState(true)
   const [totalDays, setTotalDays]             = useState(0)
   const [daysSinceFirst, setDaysSinceFirst]   = useState(0)
-  const weeklyUnlocked = totalDays >= 7 || daysSinceFirst >= 7
+  const weeklyUnlocked = BETA_MODE || totalDays >= 7 || daysSinceFirst >= 7
 
   useFocusEffect(useCallback(() => {
     async function load() {
