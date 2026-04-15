@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -76,16 +76,19 @@ export default function MorningScreen() {
   const [recoverySaved, setRecoverySaved]       = useState(false)
   const [quickMode, setQuickMode]               = useState(false)
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef = useRef(true)
 
   // Re-runs every time the screen gains focus.
   // Always checks Supabase first — so on a new day, no data is found → fresh form automatically.
   useFocusEffect(useCallback(() => {
+    isMountedRef.current = true
     // Re-seed from store on every focus (handles returning to screen same day)
     if (getTodayStatus().morningDone) setSaved(true)
 
     async function load() {
       try {
         const user = await getUser()
+        if (!isMountedRef.current) return
         if (!user) { setSaved(false); return }
         const today = new Date().toISOString().split('T')[0]
         const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
@@ -113,6 +116,7 @@ export default function MorningScreen() {
           setYesterdayWin('')
         }
         // If yesterday had no check-in at all, flag it
+        if (!isMountedRef.current) return
         setYesterdayMissed(!winData)
         if (data) {
           // Data found — populate form and show recap
@@ -131,22 +135,25 @@ export default function MorningScreen() {
           const draftKey = `igj_morning_draft_${today}`
           try {
             const raw = await AsyncStorage.getItem(draftKey)
-            if (raw) {
-              const draft = JSON.parse(raw) as Partial<Form>
-              setForm(f => ({ ...f, ...draft }))
-            } else {
-              setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
+            if (isMountedRef.current) {
+              if (raw) {
+                const draft = JSON.parse(raw) as Partial<Form>
+                setForm(f => ({ ...f, ...draft }))
+              } else {
+                setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
+              }
             }
           } catch {
-            setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
+            if (isMountedRef.current) setForm({ gratitude: '', q1: '', q2: '', q3: '', q4: '', q5: '', q6: '' })
           }
-          setSaved(false)
+          if (isMountedRef.current) setSaved(false)
         }
       } catch {
-        setSaved(false)
+        if (isMountedRef.current) setSaved(false)
       }
     }
     load()
+    return () => { isMountedRef.current = false }
   }, []))
 
   function scheduleDraftSave(nextForm: Form) {
@@ -184,7 +191,7 @@ export default function MorningScreen() {
           user_id: user.id, date: today, gratitude_entry: form.gratitude,
           q1_intention: form.q1, q2_focus: form.q2, q3_energy: form.q3,
           q4_pattern: form.q4, q5_standard: form.q5, q6_win: form.q6, is_abbreviated: quickMode,
-        })
+        }, { onConflict: 'user_id,date' })
         await updateStreak(user.id, supabase)
         // Clear draft after successful save
         await AsyncStorage.removeItem(`igj_morning_draft_${today}`).catch(() => {})
@@ -205,7 +212,7 @@ export default function MorningScreen() {
         await supabase.from('morning_checkins').upsert({
           user_id: user.id, date: yesterday,
           q4_pattern: recoveryNote.trim(), is_abbreviated: true,
-        })
+        }, { onConflict: 'user_id,date' })
       }
     } catch (e) {
       console.error('Recovery note save failed:', e)
@@ -273,7 +280,7 @@ export default function MorningScreen() {
             </Text>
           </View>
 
-          <Btn label="Back to home" onPress={() => router.back()} variant="teal" style={{ marginTop: 8 }} />
+          <Btn label="Back to home" onPress={() => router.canGoBack() ? router.back() : router.replace('/dashboard')} variant="teal" style={{ marginTop: 8 }} />
         </ScrollView>
       </SafeAreaView>
     )

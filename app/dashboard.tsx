@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useRef } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -33,8 +33,11 @@ function computeStreak(dates: string[]): { current: number; longest: number; tot
   if (!dates.length) return { current: 0, longest: 0, total: 0 }
   const dateSet = new Set(dates)
   const sorted  = [...dates].sort().reverse()            // newest first
-  const today   = new Date().toISOString().split('T')[0]
-  const yest    = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+  // Use local-date arithmetic to avoid DST-related off-by-one errors
+  const todayD  = new Date(); todayD.setHours(12, 0, 0, 0)
+  const today   = todayD.toISOString().split('T')[0]
+  const yesterdayD = new Date(todayD); yesterdayD.setDate(todayD.getDate() - 1)
+  const yest    = yesterdayD.toISOString().split('T')[0]
 
   // Current streak — only active if done today or yesterday
   let current = 0
@@ -92,7 +95,9 @@ export default function DashboardScreen() {
     }
   })
 
+  const isMountedRef = useRef(true)
   useFocusEffect(useCallback(() => {
+    isMountedRef.current = true
     // Re-seed from store on every focus (handles case where user just completed a check-in)
     const stored = getTodayStatus()
     setState(prev => ({
@@ -106,6 +111,7 @@ export default function DashboardScreen() {
     async function load() {
       try {
       const user = await getUser()
+      if (!isMountedRef.current) return
       if (!user) { setState(s => ({ ...s, loading: false })); return }
 
       const today     = new Date().toISOString().split('T')[0]
@@ -149,7 +155,7 @@ export default function DashboardScreen() {
       let todayScoreVal: number | null = null
       if (todayScore) {
         const sc = todayScore as Record<string, number>
-        const vals = [sc.awareness, sc.intention, sc.state, sc.presence, sc.ownership].filter(Boolean)
+        const vals = [sc.awareness, sc.intention, sc.state, sc.presence, sc.ownership].filter((v): v is number => typeof v === 'number' && v > 0)
         todayScoreVal = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10 : null
       }
 
@@ -190,6 +196,8 @@ export default function DashboardScreen() {
 
       const showMilestone = [7, 30].includes(streakData.current) && !!morning
 
+      if (!isMountedRef.current) return
+
       // Merge store + supabase: if either says done, it's done
       const storeStatus = getTodayStatus()
       setState(prev => ({
@@ -218,6 +226,7 @@ export default function DashboardScreen() {
       }))
 
       if (showMilestone) {
+        if (!isMountedRef.current) return
         setState(prev => ({ ...prev, loadingMilestone: true }))
         try {
           const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/streak-summary`, {
@@ -225,16 +234,20 @@ export default function DashboardScreen() {
             body: JSON.stringify({ streakDays: streakData.current }),
           })
           const data = await res.json()
-          setState(prev => ({ ...prev, milestoneSummary: data.summary ?? '', loadingMilestone: false }))
-        } catch { setState(prev => ({ ...prev, loadingMilestone: false })) }
+          if (isMountedRef.current) setState(prev => ({ ...prev, milestoneSummary: data.summary ?? '', loadingMilestone: false }))
+        } catch {
+          if (isMountedRef.current) setState(prev => ({ ...prev, loadingMilestone: false }))
+        }
       }
       } catch (e: any) {
         // Always clear loading — never leave user on a permanent spinner
-        setState(prev => ({ ...prev, loading: false }))
+        if (isMountedRef.current) setState(prev => ({ ...prev, loading: false }))
       }
     }
     load()
-  }, [getTodayStatus]))  // useFocusEffect — re-runs every time this screen gains focus
+    return () => { isMountedRef.current = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []))  // useFocusEffect — re-runs every time this screen gains focus; getTodayStatus is stable
 
   // ── Sequential hero: morning first, evening time-gated ──
   function getHero() {

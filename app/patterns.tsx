@@ -43,7 +43,7 @@ export default function PatternsScreen() {
     async function load() {
       try {
         const user = await getUser()
-        if (!user) return
+        if (!user) { setLoading(false); return }
         const thirtyDaysAgo  = new Date(Date.now() - 30  * 86400000).toISOString().split('T')[0]
         const ninetyDaysAgo  = new Date(Date.now() - 90  * 86400000).toISOString().split('T')[0]
         const eightWeeksAgo  = new Date(Date.now() - 56  * 86400000).toISOString().split('T')[0]

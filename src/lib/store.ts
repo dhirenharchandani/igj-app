@@ -16,14 +16,14 @@ export interface UserProfile {
 export interface AssessmentScores {
   body_energy: number
   mind_dialogue: number
-  intimacy_presence: number
-  family_roots: number
-  circle_influence: number
-  purpose_impact: number
-  experiences_aliveness: number
-  inner_alignment: number
-  wealth_responsibility: number
-  growth_curiosity: number
+  intimacy: number
+  family: number
+  circle: number
+  purpose: number
+  experiences: number
+  alignment: number
+  wealth: number
+  growth: number
 }
 
 export interface OnboardingState {
@@ -56,15 +56,15 @@ interface Store {
 
 export const useStore = create<Store>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       onboarding: {
         intro_completed: false,
         pillars_viewed: false,
         assessment_completed: false,
         assessment_scores: {
-          body_energy: 0, mind_dialogue: 0, intimacy_presence: 0, family_roots: 0,
-          circle_influence: 0, purpose_impact: 0, experiences_aliveness: 0,
-          inner_alignment: 0, wealth_responsibility: 0, growth_curiosity: 0,
+          body_energy: 0, mind_dialogue: 0, intimacy: 0, family: 0,
+          circle: 0, purpose: 0, experiences: 0,
+          alignment: 0, wealth: 0, growth: 0,
         },
       },
       profile: {
@@ -86,7 +86,7 @@ export const useStore = create<Store>()(
 
       getTodayStatus: () => {
         const today = new Date().toISOString().split('T')[0]
-        const stored = (useStore.getState() as Store).todayStatus
+        const stored = get().todayStatus
         // Reset if stored date is not today
         if (stored.date !== today) return { date: today, morningDone: false, eveningDone: false, scorecardDone: false }
         return stored

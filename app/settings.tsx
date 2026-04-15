@@ -33,7 +33,7 @@ export default function SettingsScreen() {
   const [saving, setSaving]   = useState(false)
   const [saved,  setSaved]    = useState(false)
   const [saveError, setSaveError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   // Notifications
   const [notifEnabled, setNotifEnabled] = useState(false)
@@ -136,7 +136,7 @@ export default function SettingsScreen() {
         evening_time: toTimeStr(eveningDate),
         identity_gap_text: identityGapText,
         display_name: displayName,
-      })
+      }, { onConflict: 'id' })
       if (error) throw error
 
       // Persist to store so fields are instant on next visit (even offline)
@@ -172,7 +172,7 @@ export default function SettingsScreen() {
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top']}>
       {/* Header */}
       <View style={[s.header, { borderBottomColor: t.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/dashboard')} style={s.backBtn} activeOpacity={0.7}>
           <Text style={[s.backText, { color: t.textSecondary }]}>←</Text>
         </TouchableOpacity>
         <Text style={[s.title, { color: t.textPrimary }]}>Settings</Text>

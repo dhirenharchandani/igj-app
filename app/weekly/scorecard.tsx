@@ -44,11 +44,11 @@ export default function WeeklyScorecardScreen() {
   async function submit() {
     setLoading(true)
     try {
-      const user = await getUser()
       const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
       const weekStart = getWeekStart()
       if (user) {
-        await supabase.from('weekly_scorecards').upsert({ user_id: user.id, week_start: weekStart, ...scores })
+        await supabase.from('weekly_scorecards').upsert({ user_id: user.id, week_start: weekStart, ...scores }, { onConflict: 'user_id,week_start' })
         try {
           const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/weekly-reflection`, {
             method: 'POST',
@@ -77,8 +77,7 @@ export default function WeeklyScorecardScreen() {
     try {
       const user = await getUser()
       if (user) {
-        await supabase.from('weekly_reflections').update({ next_week_focus: focus })
-          .eq('user_id', user.id).eq('week_start', getWeekStart())
+        await supabase.from('weekly_reflections').upsert({ user_id: user.id, week_start: getWeekStart(), next_week_focus: focus }, { onConflict: 'user_id,week_start' })
       }
     } catch (e) {
       console.error('Save weekly focus failed:', e)
@@ -102,7 +101,6 @@ export default function WeeklyScorecardScreen() {
               <Text style={[s.sub, { color: t.textSecondary }]}>Six dimensions. Did you live this, or just say it?</Text>
 
               {WEEKLY_DIMENSIONS.map(dim => {
-                const colorStyle = getWeeklyDotStyle(0, scores[dim.key])
                 return (
                   <View key={dim.key} style={s.dimBlock}>
                     <View style={s.dimHeader}>

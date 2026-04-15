@@ -62,14 +62,14 @@ export default function WeeklyResetScreen() {
   const [saving, setSaving]   = useState(false)
 
   function set(k: string, v: string) { setData(d => ({ ...d, [k]: v })) }
-  const s = SECTIONS[section]
+  const currentSection = SECTIONS[section]
 
   async function finish() {
     setSaving(true)
     try {
       const user = await getUser()
       if (user) {
-        await supabase.from('weekly_resets').upsert({ user_id: user.id, week_start: getWeekStart(), ...data })
+        await supabase.from('weekly_resets').upsert({ user_id: user.id, week_start: getWeekStart(), ...data }, { onConflict: 'user_id,week_start' })
       }
     } catch (e) {
       console.error('Weekly reset save failed:', e)
@@ -86,7 +86,7 @@ export default function WeeklyResetScreen() {
         <View style={ss.headerRow}>
           <Text style={[ss.eyebrow, { color: t.amber }]}>Weekly Reset</Text>
           <Text style={[ss.counter, { color: t.textTertiary }]}>{section + 1}/{SECTIONS.length}</Text>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/weekly/data-bridge')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
             <Text style={[ss.closeBtn, { color: t.textTertiary }]}>✕</Text>
           </TouchableOpacity>
         </View>
@@ -95,25 +95,25 @@ export default function WeeklyResetScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={ss.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={[ss.sectionNum, { color: t.amber }]}>Section {s.num}</Text>
-          <Text style={[ss.title, { color: t.textPrimary }]}>{s.title}</Text>
-          <Text style={[ss.sub, { color: t.textSecondary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>"{s.sub}"</Text>
+          <Text style={[ss.sectionNum, { color: t.amber }]}>Section {currentSection.num}</Text>
+          <Text style={[ss.title, { color: t.textPrimary }]}>{currentSection.title}</Text>
+          <Text style={[ss.sub, { color: t.textSecondary, fontFamily: 'DMSerifDisplay_400Regular_Italic' }]}>"{currentSection.sub}"</Text>
 
-          {s.fields.map(f => (
+          {currentSection.fields.map(f => (
             <View key={f.key} style={ss.field}>
               <Text style={[ss.fieldLabel, { color: t.textPrimary }]}>{f.label}</Text>
               <Input value={data[f.key] ?? ''} onChangeText={v => set(f.key, v)} placeholder={f.placeholder || `${f.label}…`} multiline numberOfLines={3} focusColor="amber" />
             </View>
           ))}
 
-          {'callout' in s && s.callout && (
+          {'callout' in currentSection && currentSection.callout && (
             <View style={[ss.callout, { backgroundColor: t.amberDim, borderLeftColor: t.amber }]}>
-              <Text style={[ss.calloutLabel, { color: t.amber }]}>{(s as any).callout.label}</Text>
-              <Input value={data[(s as any).callout.key] ?? ''} onChangeText={v => set((s as any).callout.key, v)} placeholder="Write it here…" multiline numberOfLines={2} focusColor="amber" />
+              <Text style={[ss.calloutLabel, { color: t.amber }]}>{(currentSection as any).callout.label}</Text>
+              <Input value={data[(currentSection as any).callout.key] ?? ''} onChangeText={v => set((currentSection as any).callout.key, v)} placeholder="Write it here…" multiline numberOfLines={2} focusColor="amber" />
             </View>
           )}
 
-          {'resetBlock' in s && (s as any).resetBlock && (
+          {'resetBlock' in currentSection && (currentSection as any).resetBlock && (
             <View>
               {(['Stop', 'Automate', 'Delegate'] as const).map(label => (
                 <View key={label} style={ss.field}>
@@ -138,12 +138,12 @@ export default function WeeklyResetScreen() {
       {/* Bottom nav */}
       <View style={[ss.bottom, { backgroundColor: t.bg2, borderTopColor: t.border }]}>
         {section > 0 && (
-          <TouchableOpacity onPress={() => setSection(s => s - 1)} style={[ss.backBtn, { backgroundColor: t.bg3, borderColor: t.border }]} activeOpacity={0.8}>
+          <TouchableOpacity onPress={() => setSection(prev => prev - 1)} style={[ss.backBtn, { backgroundColor: t.bg3, borderColor: t.border }]} activeOpacity={0.8}>
             <Text style={[ss.backBtnText, { color: t.textSecondary }]}>←</Text>
           </TouchableOpacity>
         )}
         {section < SECTIONS.length - 1 ? (
-          <Btn label="Next section →" onPress={() => setSection(s => s + 1)} variant="amber" />
+          <Btn label="Next section →" onPress={() => setSection(prev => prev + 1)} variant="amber" />
         ) : (
           <Btn label={saving ? 'Saving…' : 'Complete reset →'} onPress={finish} variant="amber" loading={saving} />
         )}

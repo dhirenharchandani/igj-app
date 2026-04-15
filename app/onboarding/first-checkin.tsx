@@ -48,7 +48,7 @@ export default function FirstCheckinScreen() {
           supabase.from('morning_checkins').upsert({
             user_id: user.id, date: today,
             q1_intention: answers[0], q2_focus: answers[1], q6_win: answers[2], is_abbreviated: true,
-          }).then(() => {}).catch(() => {})
+          }, { onConflict: 'user_id,date' }).then(() => {}).catch((e) => console.warn('First check-in save failed:', e))
           updateStreak(user.id, supabase).catch(() => {})
         }
       } catch {

@@ -39,7 +39,8 @@ function RootNavigator() {
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router])
 
   return (
     <>

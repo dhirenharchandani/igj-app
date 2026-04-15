@@ -36,7 +36,7 @@ export default function ScorecardScreen() {
     async function loadMorning() {
       try {
         const user = await getUser()
-        if (!user) { return }
+        if (!user) { setLoadingData(false); return }
         const today = new Date().toISOString().split('T')[0]
         const timeout = new Promise<{ data: null }>((resolve) =>
           setTimeout(() => resolve({ data: null }), 6000)
@@ -66,11 +66,11 @@ export default function ScorecardScreen() {
   async function submit() {
     setLoading(true)
     try {
-      const user = await getUser()
       const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
       const today = new Date().toISOString().split('T')[0]
       if (user) {
-        await supabase.from('daily_scorecards').upsert({ user_id: user.id, date: today, ...scores })
+        await supabase.from('daily_scorecards').upsert({ user_id: user.id, date: today, ...scores }, { onConflict: 'user_id,date' })
         try {
           const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/insight`, {
             method: 'POST',
@@ -186,7 +186,7 @@ export default function ScorecardScreen() {
             ) : null}
 
             <Btn label={saved ? '✓ Insight saved' : 'Save this insight'} onPress={saveInsight} variant="ghost" disabled={saved} style={{ marginBottom: 12 }} />
-            <Btn label="Done for today →" onPress={() => router.back()} variant="teal" />
+            <Btn label="Done for today →" onPress={() => router.canGoBack() ? router.back() : router.replace('/dashboard')} variant="teal" />
           </>
         )}
       </ScrollView>

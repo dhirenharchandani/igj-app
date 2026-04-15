@@ -92,16 +92,19 @@ export default function EveningScreen() {
   // Seed from store immediately — if evening is done, show recap without waiting for DB
   const [saved, setSaved] = useState<boolean | null>(() => getTodayStatus().eveningDone)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef = useRef(true)
   const [quickMode, setQuickMode] = useState(false)
 
   // Re-runs every time the screen gains focus.
   useFocusEffect(useCallback(() => {
+    isMountedRef.current = true
     // Re-seed from store on every focus (handles returning to screen same day)
     if (getTodayStatus().eveningDone) setSaved(true)
 
     async function load() {
       try {
         const user = await getUser()
+        if (!isMountedRef.current) return
         if (!user) { setSaved(false); return }
         const today = new Date().toISOString().split('T')[0]
 
@@ -121,6 +124,7 @@ export default function EveningScreen() {
           timeout,
         ])
 
+        if (!isMountedRef.current) return
         if (morning?.q1_intention) { setMorningIntention(morning.q1_intention); setMorningDone(true) }
 
         if (evening) {
@@ -136,35 +140,42 @@ export default function EveningScreen() {
           // No Supabase data — check for a local draft
           const draftKey = `igj_evening_draft_${today}`
           const raw = await AsyncStorage.getItem(draftKey)
-          if (raw) {
-            try {
-              const draft = JSON.parse(raw) as Form
-              setForm(draft)
-            } catch {}
-          } else {
-            setForm({ q1: '', q2: '', q3: '', q4: '', q5: '' })
+          if (isMountedRef.current) {
+            if (raw) {
+              try {
+                const draft = JSON.parse(raw) as Form
+                setForm(draft)
+              } catch {
+                setForm({ q1: '', q2: '', q3: '', q4: '', q5: '' })
+              }
+            } else {
+              setForm({ q1: '', q2: '', q3: '', q4: '', q5: '' })
+            }
+            setSaved(false)
           }
-          setSaved(false)
         }
       } catch {
-        setSaved(false)
+        if (isMountedRef.current) setSaved(false)
       }
     }
     load()
+    return () => { isMountedRef.current = false }
   }, []))
 
   function set(k: keyof Form) {
     return (v: string) => {
-      setForm(f => {
-        const next = { ...f, [k]: v }
-        // Debounce-save draft to AsyncStorage
-        if (debounceTimer.current) clearTimeout(debounceTimer.current)
-        debounceTimer.current = setTimeout(async () => {
-          const today = new Date().toISOString().split('T')[0]
-          await AsyncStorage.setItem(`igj_evening_draft_${today}`, JSON.stringify(next))
-        }, 1500)
-        return next
-      })
+      // Update state first, then schedule draft save outside the updater to avoid React strict-mode double-invoke issues
+      setForm(f => ({ ...f, [k]: v }))
+      if (debounceTimer.current) clearTimeout(debounceTimer.current)
+      debounceTimer.current = setTimeout(async () => {
+        const today = new Date().toISOString().split('T')[0]
+        // We need the latest form value — capture v + k directly since we have them in closure
+        setForm(current => {
+          const next = { ...current, [k]: v }
+          AsyncStorage.setItem(`igj_evening_draft_${today}`, JSON.stringify(next)).catch(() => {})
+          return current  // don't change state, just read it
+        })
+      }, 1500)
     }
   }
 
@@ -183,7 +194,7 @@ export default function EveningScreen() {
         await supabase.from('evening_checkins').upsert({
           user_id: user.id, date: today,
           q1_delivered: form.q1, q2_pattern: form.q2, q3_gap: form.q3, q4_learning: form.q4, q5_tomorrow: form.q5,
-        })
+        }, { onConflict: 'user_id,date' })
         // Clear the draft now that the real data is saved
         await AsyncStorage.removeItem(`igj_evening_draft_${today}`).catch(() => {})
       }
@@ -243,7 +254,7 @@ export default function EveningScreen() {
           )}
 
           <Btn label="Score the day →" onPress={() => router.push('/checkin/scorecard')} variant="blue" style={{ marginBottom: 12 }} />
-          <Btn label="Back to home" onPress={() => router.back()} variant="ghost" />
+          <Btn label="Back to home" onPress={() => router.canGoBack() ? router.back() : router.replace('/dashboard')} variant="ghost" />
         </ScrollView>
       </SafeAreaView>
     )

@@ -60,7 +60,7 @@ export default function IdentityScreen() {
       supabase.from('user_profiles').upsert({
         id: user.id,
         identity_gap_text: gapText, focus_pillar: goal,
-      }).then(() => {}).catch(() => {})
+      }, { onConflict: 'id' }).then(() => {}).catch((e) => console.warn('Identity save failed:', e))
     }
   }
 
@@ -68,7 +68,7 @@ export default function IdentityScreen() {
     <SafeAreaView style={[s.safe, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={s.dotsContainer}>
-          <ProgressDots current={step === 4 ? 2 : step === 3 ? 2 : step} />
+          <ProgressDots current={step} />
         </View>
 
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">

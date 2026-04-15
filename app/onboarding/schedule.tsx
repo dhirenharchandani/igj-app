@@ -21,9 +21,10 @@ export default function ScheduleScreen() {
   const t      = useTheme()
   const [morningTime, setMorningTime] = useState('07:00')
   const [eveningTime, setEveningTime] = useState('21:00')
-  const [saving] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   async function save() {
+    setSaving(true)
     // Navigate immediately — don't block on network
     router.replace('/assessment')
     // Fire-and-forget save in background
@@ -33,10 +34,12 @@ export default function ScheduleScreen() {
         supabase.from('user_profiles').upsert({
           id: user.id, morning_time: morningTime + ':00',
           evening_time: eveningTime + ':00', onboarding_done: true,
-        }).then(() => {}).catch(() => {})
+        }, { onConflict: 'id' }).then(() => {}).catch((e) => console.warn('Schedule save failed:', e))
       }
-    } catch {
-      // silently ignore — onboarding_done will be set on next save
+    } catch (e) {
+      console.warn('Schedule save failed:', e)
+    } finally {
+      setSaving(false)
     }
   }
 

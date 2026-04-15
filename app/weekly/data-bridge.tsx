@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { View, Text, ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useFocusEffect } from '@react-navigation/native'
 import { useTheme } from '../../src/ThemeContext'
 import { supabase, getUser } from '../../src/lib/supabase'
 import { getWeekStart } from '../../src/lib/utils/scoring'
@@ -20,11 +21,11 @@ export default function DataBridgeScreen() {
   const [daysSinceFirst, setDaysSinceFirst]   = useState(0)
   const weeklyUnlocked = totalDays >= 7 || daysSinceFirst >= 7
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     async function load() {
       try {
         const user = await getUser()
-        if (!user) return
+        if (!user) { setLoading(false); return }
 
         // Check unlock status — fetch all check-in dates (morning + evening)
         const timeout1 = new Promise<never>((_, reject) =>
@@ -92,7 +93,7 @@ export default function DataBridgeScreen() {
       }
     }
     load()
-  }, [])
+  }, []))
 
   function scoreColor(v: number) {
     if (v < 2.5) return t.coral; if (v < 3.5) return t.amber; return t.teal

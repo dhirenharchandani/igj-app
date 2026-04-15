@@ -35,7 +35,7 @@ export default function AssessmentScreen() {
   const insets  = useSafeAreaInsets()
   const markAssessmentDone = useStore(s => s.markAssessmentDone)
 
-  const [loading,  setLoading]  = useState(false)
+  const [loading,  setLoading]  = useState(true)
   const [current,  setCurrent]  = useState(0)
   const [scores,   setScores]   = useState<Record<string, number>>({})
   const [saving,   setSaving]   = useState(false)
@@ -43,6 +43,7 @@ export default function AssessmentScreen() {
 
   // Load existing assessment every time screen is focused
   useFocusEffect(useCallback(() => {
+    setLoading(true)
     setCurrent(0)
 
     async function load() {
