@@ -65,13 +65,22 @@ export default function ScorecardScreen() {
 
   async function submit() {
     setLoading(true)
+    // Mark done immediately — never block on network
+    markScorecardDone()
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const user = session?.user ?? null
       const today = new Date().toISOString().split('T')[0]
       if (user) {
-        await supabase.from('daily_scorecards').upsert({ user_id: user.id, date: today, ...scores }, { onConflict: 'user_id,date' })
+        // Save scorecard (fast)
+        await supabase.from('daily_scorecards').upsert(
+          { user_id: user.id, date: today, ...scores },
+          { onConflict: 'user_id,date' }
+        )
+        // Fetch AI insight — 5 second timeout so it never hangs indefinitely
         try {
+          const controller = new AbortController()
+          const insightTimeout = setTimeout(() => controller.abort(), 5000)
           const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/insight`, {
             method: 'POST',
             headers: {
@@ -79,16 +88,16 @@ export default function ScorecardScreen() {
               ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
             },
             body: JSON.stringify({ date: today }),
+            signal: controller.signal,
           })
+          clearTimeout(insightTimeout)
           const data = await res.json()
           setInsight(data.insight ?? '')
           setLowestDim(data.lowestDimension ?? '')
-        } catch (e) {
-          console.error('Insight fetch failed:', e)
+        } catch {
+          // API unreachable or timed out — scorecard is still saved, just no AI insight
         }
       }
-      // ── Mark done in store immediately — dashboard reads this, no async delay ──
-      markScorecardDone()
     } catch (e) {
       console.error('Scorecard submit failed:', e)
     } finally {
