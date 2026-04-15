@@ -38,7 +38,6 @@ export default function AssessmentScreen() {
   const [loading,  setLoading]  = useState(true)
   const [current,  setCurrent]  = useState(0)
   const [scores,   setScores]   = useState<Record<string, number>>({})
-  const [saving,   setSaving]   = useState(false)
   const [done,     setDone]     = useState(false)
 
   // Load existing assessment every time screen is focused
@@ -88,20 +87,19 @@ export default function AssessmentScreen() {
   const area  = AREAS[current]
   const score = scores[area?.key ?? ''] ?? 0
 
-  async function save() {
-    setSaving(true)
-    try {
-      const user = await getUser()
-      if (user) {
-        await supabase.from('life_assessments').insert({ user_id: user.id, ...scores })
-      }
-      markAssessmentDone()   // persist to store immediately — dashboard reads this on mount
-      setDone(true)
-    } catch {
-      setDone(true)          // still advance even if save fails
-    } finally {
-      setSaving(false)
-    }
+  // Fully synchronous — zero awaits, zero blocking
+  function save() {
+    markAssessmentDone()
+    setDone(true)
+
+    // Save to Supabase in background — pure fire and forget
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user
+      if (!user) return
+      supabase.from('life_assessments')
+        .insert({ user_id: user.id, ...scores })
+        .then(() => {}).catch(() => {})
+    }).catch(() => {})
   }
 
   // ── Loading ──
@@ -229,11 +227,10 @@ export default function AssessmentScreen() {
             <Btn label="Next →" onPress={() => setCurrent(c => c + 1)} variant="purple" disabled={!score} />
           ) : (
             <Btn
-              label={saving ? 'Saving…' : 'Save my assessment →'}
+              label="Save my assessment →"
               onPress={save}
               variant="purple"
-              disabled={!score || saving}
-              loading={saving}
+              disabled={!score}
             />
           )}
         </View>
