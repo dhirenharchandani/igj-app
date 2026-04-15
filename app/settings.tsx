@@ -149,7 +149,7 @@ export default function SettingsScreen() {
     setSaving(true)
     try {
       const user = await getUser()
-      if (!user) return
+      if (!user) { setSaving(false); return }
 
       const { error } = await supabase.from('user_profiles').upsert({
         id: user.id,

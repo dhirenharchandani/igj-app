@@ -32,6 +32,7 @@ export default function WeeklyScorecardScreen() {
   const router  = useRouter()
   const t       = useTheme()
   const [scores, setScores] = useState<Record<string, number>>({ clarity: 0, ownership: 0, presence: 0, standards: 0, courage: 0, growth: 0 })
+  const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [reflection, setReflection] = useState('')
   const [focus, setFocus]     = useState('')
@@ -41,35 +42,32 @@ export default function WeeklyScorecardScreen() {
   const allRated = Object.values(scores).every(v => v > 0)
   const total    = Object.values(scores).reduce((a, b) => a + b, 0)
 
-  async function submit() {
-    setLoading(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const user = session?.user ?? null
+  // Fully synchronous — flips to results view immediately, saves + fetches in background
+  function submit() {
+    setLoading(true) // show brief "synthesising" label on button
+    setSubmitted(true)
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user
+      if (!user) { setLoading(false); return }
       const weekStart = getWeekStart()
-      if (user) {
-        await supabase.from('weekly_scorecards').upsert({ user_id: user.id, week_start: weekStart, ...scores }, { onConflict: 'user_id,week_start' })
-        try {
-          const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/weekly-reflection`, {
+      supabase.from('weekly_scorecards')
+        .upsert({ user_id: user.id, week_start: weekStart, ...scores }, { onConflict: 'user_id,week_start' })
+        .then(() => {
+          const apiUrl = process.env.EXPO_PUBLIC_API_URL
+          if (!apiUrl || apiUrl.includes('192.168')) { setLoading(false); return }
+          const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000))
+          const req = fetch(`${apiUrl}/api/weekly-reflection`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ weekStart }),
-          })
-          const data = await res.json()
-          setReflection(data.reflection ?? '')
-          setFocus(data.suggestedShift ?? '')
-        } catch (e) {
-          console.error('Weekly reflection fetch failed:', e)
-        }
-      }
-    } catch (e) {
-      console.error('Weekly scorecard submit failed:', e)
-    } finally {
-      setLoading(false)
-    }
+          }).then(r => r.json()).catch(() => null)
+          Promise.race([req, timeout]).then(data => {
+            if (data?.reflection) setReflection(data.reflection)
+            if (data?.suggestedShift) setFocus(data.suggestedShift)
+          }).catch(() => {}).finally(() => setLoading(false))
+        }).catch(() => { setLoading(false) })
+    }).catch(() => { setLoading(false) })
   }
 
   async function saveFocus() {
@@ -79,11 +77,11 @@ export default function WeeklyScorecardScreen() {
       if (user) {
         await supabase.from('weekly_reflections').upsert({ user_id: user.id, week_start: getWeekStart(), next_week_focus: focus }, { onConflict: 'user_id,week_start' })
       }
+      setFocusSaved(true) // only mark saved on success
     } catch (e) {
       console.error('Save weekly focus failed:', e)
     } finally {
       setSaving(false)
-      setFocusSaved(true)
     }
   }
 
@@ -96,7 +94,7 @@ export default function WeeklyScorecardScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-          {!reflection ? (
+          {!submitted ? (
             <>
               <Text style={[s.sub, { color: t.textSecondary }]}>Six dimensions. Did you live this, or just say it?</Text>
 

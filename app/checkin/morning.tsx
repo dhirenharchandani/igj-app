@@ -8,7 +8,6 @@ import * as Haptics from 'expo-haptics'
 import { useTheme } from '../../src/ThemeContext'
 import { useStore } from '../../src/lib/store'
 import { supabase, getUser } from '../../src/lib/supabase'
-import { updateStreak } from '../../src/lib/utils/streak'
 import { BottomNav } from '../../src/components/BottomNav'
 import { Input } from '../../src/components/ui/Input'
 import { Btn } from '../../src/components/ui/Btn'
@@ -211,7 +210,6 @@ export default function MorningScreen() {
           q1_intention: form.q1, q2_focus: form.q2, q3_energy: form.q3,
           q4_pattern: form.q4, q5_standard: form.q5, q6_win: form.q6, is_abbreviated: quickMode,
         }, { onConflict: 'user_id,date' })
-        await updateStreak(user.id, supabase)
         // Clear draft after successful save
         await AsyncStorage.removeItem(`igj_morning_draft_${today}`).catch(() => {})
       }

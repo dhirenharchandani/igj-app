@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, KeyboardAvoidingV
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTheme } from '../../src/ThemeContext'
-import { supabase, getUser } from '../../src/lib/supabase'
+import { supabase } from '../../src/lib/supabase'
 import { getWeekStart } from '../../src/lib/utils/scoring'
 import { Input } from '../../src/components/ui/Input'
 import { Btn } from '../../src/components/ui/Btn'
@@ -59,24 +59,19 @@ export default function WeeklyResetScreen() {
   const t       = useTheme()
   const [section, setSection] = useState(0)
   const [data, setData]       = useState<ResetData>({})
-  const [saving, setSaving]   = useState(false)
-
   function set(k: string, v: string) { setData(d => ({ ...d, [k]: v })) }
   const currentSection = SECTIONS[section]
 
-  async function finish() {
-    setSaving(true)
-    try {
-      const user = await getUser()
-      if (user) {
-        await supabase.from('weekly_resets').upsert({ user_id: user.id, week_start: getWeekStart(), ...data }, { onConflict: 'user_id,week_start' })
-      }
-    } catch (e) {
-      console.error('Weekly reset save failed:', e)
-    } finally {
-      setSaving(false)
-      router.push('/weekly/scorecard')
-    }
+  // Navigate immediately — save in background
+  function finish() {
+    router.push('/weekly/scorecard')
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user
+      if (!user) return
+      supabase.from('weekly_resets')
+        .upsert({ user_id: user.id, week_start: getWeekStart(), ...data }, { onConflict: 'user_id,week_start' })
+        .then(() => {}).catch(() => {})
+    }).catch(() => {})
   }
 
   return (
@@ -145,7 +140,7 @@ export default function WeeklyResetScreen() {
         {section < SECTIONS.length - 1 ? (
           <Btn label="Next section →" onPress={() => setSection(prev => prev + 1)} variant="amber" />
         ) : (
-          <Btn label={saving ? 'Saving…' : 'Complete reset →'} onPress={finish} variant="amber" loading={saving} />
+          <Btn label="Complete reset →" onPress={finish} variant="amber" />
         )}
       </View>
     </SafeAreaView>
